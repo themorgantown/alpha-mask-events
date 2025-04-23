@@ -74,7 +74,19 @@ AME.register(document.querySelector('.irregular-button'));
 
 ## CDN via JsDelivr
 
-TODO 
+Grab the `<script>` code here: https://www.jsdelivr.com/package/npm/alpha-mask-events 
+
+JS: 
+```
+AlphaMaskEvents.init(); // Scan and activate all .alpha-mask-events
+AlphaMaskEvents.register(document.querySelector('#myImg'), { threshold: 0.95 });
+```
+
+HTML: 
+```
+<img src="sprite.png" class="alpha-mask-events">
+```
+
 
 ## Use Cases
 
