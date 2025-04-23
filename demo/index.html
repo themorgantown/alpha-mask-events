@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Clickable Transparency Demo</title>
+    <link rel="icon" href="">
+    <style>
+      body {
+        font-family: sans-serif;
+        background: #fafafa;
+        margin: 0;
+        padding: 2rem;
+      }
+      .demo-container {
+        display: flex;
+        gap: 2rem;
+        flex-wrap: wrap;
+        justify-content: center;
+      }
+      .flip-container {
+        perspective: 1000px;
+        width: 250px;
+        height: 250px;
+        cursor: auto;
+      }
+      .flip-inner {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        transform-style: preserve-3d;
+        transition: transform 0.6s;
+      }
+      .flipped .flip-inner {
+        transform: rotateY(180deg);
+      }
+      .flip-front,
+      .flip-back {
+        position: absolute;
+        top: 0;
+        left: 0;
+        backface-visibility: hidden;
+        width: 100%;
+        height: 100%;
+        /* For demo clarity */
+        border: 1px solid #ccc;
+      }
+      .flip-back {
+        transform: rotateY(180deg);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Clickable Transparency Demo</h1>
+    <p>Click on the solid part of the image to flip it.</p>
+    <p>Offscreen Canvas for Pixel Inspection
+      The code creates a hidden (offscreen) canvas for each flip container:
+      
+      An offscreen canvas is used so that the image's pixel data can be inspected without modifying what the user sees.
+      The canvas’s dimensions are set on the load event of the image to match its natural (intrinsic) width and height. This ensures that pixel values (especially the alpha channel) are read correctly.
+      Event Listeners
+      Two main event listeners are added to each flip container:
+      
+      mousemove
+      
+      Calculates the mouse position relative to the actual image.
+      Uses getBoundingClientRect() to get the rendered dimensions and position.
+      Determines the corresponding pixel coordinates on the offscreen canvas by applying a scale factor (canvas natural size divided by the displayed size).
+      Draws the front image onto the canvas and uses getImageData to read the alpha channel (fourth byte) of the pixel where the mouse is located.
+      If the alpha value is greater than 0 (i.e., the pixel is not fully transparent), the cursor changes to a pointer, suggesting that click interaction is possible.
+      click
+      
+      Similar coordinate calculations are performed to translate the click position from the visible image coordinate system to the offscreen canvas coordinate system.
+      The image is drawn again onto the canvas, the pixel data is checked, and if the alpha channel indicates opacity, the container’s CSS class flipped is toggled.
+      It also logs the time taken for the transparency check, which helps in diagnosing performance if needed.
+      Cross-Origin Image Handling
+      
+      The crossOrigin="anonymous" attribute is used on the <img> tags. This allows the image to be loaded in a way that lets the canvas access its pixel data without being tainted by cross-origin security restrictions.
+      CSS Interaction (Outside the Script)
+      
+      The script toggles a CSS class flipped on a container, which presumably is used to apply CSS transitions or transforms to create the flipping effect. This separation of concerns (logic in JS, styles in CSS) is a good practice.
+      In summary, the implementation leverages an offscreen canvas along with precise calculations of scaling between the rendered image and its natural size. This allows it to accurately determine whether a user’s click occurred on an opaque (non-transparent) pixel, enabling a selective flipping effect based on image content. </p>
+    <div class="demo-container">
+      <!-- Demo Button 1 -->
+      <div class="flip-container" id="flip1">
+        <div class="flip-inner">
+          <img src="noun-open-source-5318532.png" alt="Demo Front" class="flip-front" crossOrigin="anonymous" />
+          <img src="noun-open-source-5318532.png" alt="Demo Back" class="flip-back" crossOrigin="anonymous" />
+        </div>
+      </div>
+      <!-- Demo Button 2 -->
+      <div class="flip-container" id="flip2">
+        <div class="flip-inner">
+          <img src="noun-open-source-5318532.png" alt="Demo Front" class="flip-front" crossOrigin="anonymous" />
+          <img src="noun-open-source-5318532.png" alt="Demo Back" class="flip-back" crossOrigin="anonymous" />
+        </div>
+      </div>
+    </div>
+    <script>
+      // For each flip container, use an offscreen canvas to check the alpha channel at the click position.
+      function setupClickableTransparency(flipContainerId) {
+        const container = document.getElementById(flipContainerId);
+        const frontImage = container.querySelector('.flip-front');
+        // Create an offscreen canvas for hit-testing
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+        frontImage.addEventListener('load', () => {
+          canvas.width = frontImage.naturalWidth;
+          canvas.height = frontImage.naturalHeight;
+        });
+
+        // change cursor based on pixel transparency
+        container.addEventListener('mousemove', event => {
+          const rect = frontImage.getBoundingClientRect();
+          const mx = event.clientX - rect.left;
+          const my = event.clientY - rect.top;
+          const sx = canvas.width / rect.width;
+          const sy = canvas.height / rect.height;
+          const x = Math.floor(mx * sx);
+          const y = Math.floor(my * sy);
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(frontImage, 0, 0, canvas.width, canvas.height);
+          const alpha = ctx.getImageData(x, y, 1, 1).data[3];
+          container.style.cursor = alpha > 0 ? 'pointer' : 'auto';
+        });
+
+        container.addEventListener('click', (event) => {
+          // start timing transparency check
+          const startTime = performance.now();
+          // Get bounding rect of the front image
+          const rect = frontImage.getBoundingClientRect();
+          // Calculate click coordinates relative to the image
+          const clickX = event.clientX - rect.left;
+          const clickY = event.clientY - rect.top;
+          // Adjust coordinates to the image's natural size
+          const scaleX = canvas.width / rect.width;
+          const scaleY = canvas.height / rect.height;
+          const x = Math.floor(clickX * scaleX);
+          const y = Math.floor(clickY * scaleY);
+
+          // Draw the current image onto the canvas for pixel inspection
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(frontImage, 0, 0, canvas.width, canvas.height);
+
+          // Get the pixel data at the click position
+          const pixel = ctx.getImageData(x, y, 1, 1).data;
+          // log how long the transparency check took
+          console.log(`Transparency check for ${flipContainerId} took ${(performance.now() - startTime).toFixed(2)} ms`);
+          // Check if the alpha value indicates non-transparency (> 0)
+          if (pixel[3] > 0) {
+            container.classList.toggle('flipped');
+          }
+        });
+      }
+
+      // Initialize both demo buttons
+      setupClickableTransparency("flip1");
+      setupClickableTransparency("flip2");
+    </script>
+  </body>
+</html>
