@@ -35,7 +35,7 @@
   "type": "module",
   "repository": {
     "type": "git",
-    "url": "https://github.com/themorgantown/alpha-mask-events.git"
+    "url": "git+https://github.com/themorgantown/alpha-mask-events.git"
   },
   "bugs": {
     "url": "https://github.com/themorgantown/alpha-mask-events/issues"
