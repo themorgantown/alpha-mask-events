@@ -192,6 +192,21 @@
         transform: scale(1.02);
       }
 
+      /* Mask Overlay */
+      .mask-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        pointer-events: none;
+        z-index: 10;
+        opacity: 0.6;
+        transition: opacity 0.3s ease;
+      }
+
+      .mask-overlay.hidden {
+        opacity: 0;
+      }
+
       /* Stats Display */
       .stats-container {
         background: white;
@@ -312,6 +327,11 @@
         <button id="clear-stats">Clear Statistics</button>
         <button id="reset-demo">Reset Demo</button>
       </div>
+      <div class="control-group">
+        <label for="mask-toggle">Show Visual Mask:</label>
+        <input type="checkbox" id="mask-toggle" />
+        <span style="font-size: 0.8rem; color: #666;">Shows clickable areas in light red</span>
+      </div>
     </div>
 
     <!-- Statistics Display -->
@@ -368,7 +388,7 @@
       <!-- Demo Card 2: Threshold Comparison -->
       <div class="demo-card">
         <h3>Threshold Comparison</h3>
-        <p>This uses a lower threshold (0.5) to show more pixels as clickable.</p>
+        <p>This uses a lower threshold (0.75) to show more pixels as clickable.</p>
         <div class="flip-container" id="flip2">
           <div class="flip-inner">
             <img 
@@ -376,7 +396,7 @@
               alt="Open Source Icon" 
               class="alpha-mask-events flip-front" 
               crossorigin="anonymous"
-              data-threshold="0.5"
+              data-threshold="0.75"
             />
             <div class="flip-back">Lower Threshold! 🔧</div>
           </div>
@@ -427,6 +447,114 @@
         responseTimes: [],
         currentThreshold: 0.95
       };
+
+      // Mask visualization state
+      let maskVisible = false;
+      const maskCanvases = new Map();
+
+      // Create visual mask overlay for an image
+      function createMaskOverlay(img) {
+        const container = img.parentElement;
+        const canvas = document.createElement('canvas');
+        canvas.className = 'mask-overlay hidden';
+        
+        // Position canvas to match image
+        function updateCanvasPosition() {
+          const imgRect = img.getBoundingClientRect();
+          const containerRect = container.getBoundingClientRect();
+          
+          canvas.width = img.offsetWidth;
+          canvas.height = img.offsetHeight;
+          canvas.style.width = img.offsetWidth + 'px';
+          canvas.style.height = img.offsetHeight + 'px';
+          canvas.style.left = (img.offsetLeft) + 'px';
+          canvas.style.top = (img.offsetTop) + 'px';
+        }
+
+        container.appendChild(canvas);
+        updateCanvasPosition();
+        
+        // Store canvas reference
+        maskCanvases.set(img, canvas);
+        
+        // Update position on window resize
+        window.addEventListener('resize', updateCanvasPosition);
+        
+        return canvas;
+      }
+
+      // Generate mask based on alpha threshold
+      function updateMask(img, threshold) {
+        const canvas = maskCanvases.get(img);
+        if (!canvas) return;
+        
+        const ctx = canvas.getContext('2d');
+        const tempCanvas = document.createElement('canvas');
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        // Set canvas dimensions to match image natural size for accurate pixel reading
+        tempCanvas.width = img.naturalWidth;
+        tempCanvas.height = img.naturalHeight;
+        
+        // Draw image to temp canvas
+        tempCtx.drawImage(img, 0, 0);
+        
+        // Get image data
+        const imageData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+        const data = imageData.data;
+        
+        // Clear the display canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Create mask data
+        const maskCanvas = document.createElement('canvas');
+        maskCanvas.width = tempCanvas.width;
+        maskCanvas.height = tempCanvas.height;
+        const maskCtx = maskCanvas.getContext('2d');
+        const maskImageData = maskCtx.createImageData(maskCanvas.width, maskCanvas.height);
+        const maskData = maskImageData.data;
+        
+        // Process each pixel
+        for (let i = 0; i < data.length; i += 4) {
+          const alpha = data[i + 3] / 255; // Normalize alpha to 0-1
+          
+          if (alpha > threshold) {
+            // Opaque area - show red mask
+            maskData[i] = 255;     // Red
+            maskData[i + 1] = 0;   // Green
+            maskData[i + 2] = 0;   // Blue
+            maskData[i + 3] = 100; // Semi-transparent red
+          } else {
+            // Transparent area - no mask
+            maskData[i] = 0;
+            maskData[i + 1] = 0;
+            maskData[i + 2] = 0;
+            maskData[i + 3] = 0;
+          }
+        }
+        
+        // Put mask data on mask canvas
+        maskCtx.putImageData(maskImageData, 0, 0);
+        
+        // Draw scaled mask on display canvas
+        ctx.drawImage(maskCanvas, 0, 0, canvas.width, canvas.height);
+      }
+
+      // Toggle mask visibility
+      function toggleMaskVisibility(visible) {
+        maskVisible = visible;
+        maskCanvases.forEach((canvas, img) => {
+          if (visible) {
+            canvas.classList.remove('hidden');
+            // Use the current slider threshold for all images when showing masks
+            // This provides a consistent comparison across all images
+            updateMask(img, stats.currentThreshold);
+            addLogEntry(`Showing mask for ${img.alt} with threshold ${stats.currentThreshold}`, 'info');
+          } else {
+            canvas.classList.add('hidden');
+          }
+        });
+      }
 
       // Debug logging
       let debugEnabled = true;
@@ -485,13 +613,13 @@
           addLogEntry('Manually registered element with threshold 0.8', 'info');
         }
         
-        // Register element with custom threshold (this is already detected by the class)
-        const customThresholdImg = document.querySelector('[data-threshold="0.5"]');
+        // Explicitly register the threshold comparison element
+        const customThresholdImg = document.querySelector('[data-threshold="0.75"]');
         if (customThresholdImg) {
-          // This element already has the class, so it's auto-registered
-          // We just need to update its threshold
-          AlphaMaskEvents.register(customThresholdImg, { threshold: 0.5 });
-          addLogEntry('Updated element with custom threshold 0.5', 'info');
+          // Force re-registration with the correct threshold
+          AlphaMaskEvents.unregister(customThresholdImg);
+          AlphaMaskEvents.register(customThresholdImg, { threshold: 0.75 });
+          addLogEntry('Re-registered threshold comparison element with threshold 0.75', 'info');
         }
         
         updateStats();
@@ -511,6 +639,17 @@
           // Update global threshold
           AlphaMaskEvents.setThreshold(newThreshold);
           addLogEntry(`Threshold updated to ${newThreshold}`, 'info');
+          
+          // Update masks if visible - use the slider value for ALL images to show comparison
+          if (maskVisible) {
+            maskCanvases.forEach((canvas, img) => {
+              // Use the slider threshold for all images when slider changes
+              // This allows users to see how different thresholds affect the same image
+              updateMask(img, newThreshold);
+              addLogEntry(`Updated mask for ${img.alt} with threshold ${newThreshold}`, 'info');
+            });
+          }
+          
           updateStats();
         });
 
@@ -519,6 +658,13 @@
         logToggle.addEventListener('change', (e) => {
           debugEnabled = e.target.checked;
           addLogEntry(`Debug logging ${debugEnabled ? 'enabled' : 'disabled'}`, 'info');
+        });
+
+        // Mask visualization toggle
+        const maskToggle = document.getElementById('mask-toggle');
+        maskToggle.addEventListener('change', (e) => {
+          toggleMaskVisibility(e.target.checked);
+          addLogEntry(`Visual mask ${e.target.checked ? 'enabled' : 'disabled'}`, 'info');
         });
 
         // Clear statistics
@@ -549,7 +695,7 @@
               const startTime = performance.now();
               stats.totalClicks++;
               stats.transparentClicks++;
-              
+
               addLogEntry(`Click on transparent area/background of container ${index + 1} - NO FLIP`, 'warning');
               
               const responseTime = performance.now() - startTime;
@@ -559,27 +705,39 @@
               if (stats.responseTimes.length > 20) {
                 stats.responseTimes.shift();
               }
-              
+
               updateStats();
             }
           });
         });
 
         // Add visual feedback for alpha-mask events
-        document.querySelectorAll('.alpha-mask-events').forEach(img => {
+        document.querySelectorAll('.alpha-mask-events').forEach((img, imgIndex) => {
+          // Create mask overlay for each image
+          img.addEventListener('load', () => {
+            createMaskOverlay(img);
+            addLogEntry(`Mask overlay created for image ${imgIndex + 1}`, 'info');
+          });
+          
+          // If image is already loaded, create mask immediately
+          if (img.complete) {
+            createMaskOverlay(img);
+            addLogEntry(`Mask overlay created for image ${imgIndex + 1} (already loaded)`, 'info');
+          }
+          
           // Track mouse state for better click detection
           let isOverOpaque = false;
           
           img.addEventListener('alpha-mask-over', () => {
             img.classList.add('opaque-hover');
             isOverOpaque = true;
-            addLogEntry(`Mouse entered opaque region of ${img.alt}`, 'info');
+            addLogEntry(`Mouse entered opaque region of ${img.alt} (image ${imgIndex + 1})`, 'info');
           });
 
           img.addEventListener('alpha-mask-out', () => {
             img.classList.remove('opaque-hover');
             isOverOpaque = false;
-            addLogEntry(`Mouse left opaque region of ${img.alt}`, 'info');
+            addLogEntry(`Mouse left opaque region of ${img.alt} (image ${imgIndex + 1})`, 'info');
           });
           
           // Add click listener directly to the image to catch opaque clicks
@@ -588,10 +746,20 @@
             const container = img.closest('.flip-container');
             const index = Array.from(document.querySelectorAll('.flip-container')).indexOf(container);
             
+            const startTime = performance.now();
             stats.totalClicks++;
             stats.opaqueClicks++;
             container.classList.toggle('flipped');
-            addLogEntry(`Flip container ${index + 1} clicked (opaque area) - FLIPPED!`, 'success');
+            
+            const responseTime = performance.now() - startTime;
+            stats.responseTimes.push(responseTime);
+            
+            // Keep only last 20 response times for averaging
+            if (stats.responseTimes.length > 20) {
+              stats.responseTimes.shift();
+            }
+            
+            addLogEntry(`Flip container ${index + 1} clicked (opaque area on image ${imgIndex + 1}) - FLIPPED!`, 'success');
             updateStats();
           });
         });
@@ -601,14 +769,21 @@
       document.addEventListener('DOMContentLoaded', () => {
         addLogEntry('DOM loaded, initializing demo...', 'info');
         initializeAME();
-        setupEventListeners();
-        addLogEntry('Demo initialization complete!', 'success');
+        
+        // Wait a bit for images to load and alpha-mask-events to fully initialize
+        setTimeout(() => {
+          setupEventListeners();
+          addLogEntry('Demo initialization complete!', 'success');
+        }, 100);
       });
 
-            // Add some performance monitoring
+                        // Add some performance monitoring
       window.addEventListener('load', () => {
         addLogEntry(`Page fully loaded in ${Math.round(performance.now())}ms`, 'success');
       });
+    </script>
+  </body>
+</html>
     </script>
   </body>
 </html>
@@ -621,7 +796,7 @@
     <p>Click on the solid part of the image to flip it.</p>
     <p>Offscreen Canvas for Pixel Inspection
       The code creates a hidden (offscreen) canvas for each flip container:</p>
-      
+
       An offscreen canvas is used so that the image's pixel data can be inspected without modifying what the user sees.
       The canvas’s dimensions are set on the load event of the image to match its natural (intrinsic) width and height. This ensures that pixel values (especially the alpha channel) are read correctly.
       Event Listeners
@@ -647,14 +822,5 @@
       The script toggles a CSS class flipped on a container, which presumably is used to apply CSS transitions or transforms to create the flipping effect. This separation of concerns (logic in JS, styles in CSS) is a good practice.
       In summary, the implementation leverages an offscreen canvas along with precise calculations of scaling between the rendered image and its natural size. This allows it to accurately determine whether a user’s click occurred on an opaque (non-transparent) pixel, enabling a selective flipping effect based on image content. </p>
 
-    <script>
-      // Add click event listener to each flip container to toggle the "flipped" class
-      document.querySelectorAll('.flip-container').forEach(container => {
-      container.addEventListener('click', function() {
-        this.classList.toggle('flipped');
-      });
-      });
-    </script>
-   
   </body>
 </html>

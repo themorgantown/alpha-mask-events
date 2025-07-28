@@ -74,7 +74,7 @@ AME.register(document.querySelector('.irregular-button'));
 
 ## CDN via JsDelivr
 
-Grab the `<script>` code here: https://www.jsdelivr.com/package/npm/alpha-mask-events 
+Grab the `<script>` code here: https://www.jsdelivr.com/package/npm/alpha-mask-events
 
 JS: 
 ```
