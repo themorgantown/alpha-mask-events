@@ -1,161 +1,660 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Alpha Mask Events - Simple Demo</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Alpha Mask Events - Interactive Demo</title>
+    <link rel="icon" href="">
     <style>
+      /* CSS Custom Properties for theming */
+      :root {
+        --primary-color: #007bff;
+        --success-color: #28a745;
+        --warning-color: #ffc107;
+        --danger-color: #dc3545;
+        --light-bg: #fafafa;
+        --dark-text: #333;
+        --border-color: #ddd;
+        --shadow: 0 2px 10px rgba(0,0,0,0.1);
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: var(--light-bg);
+        margin: 0;
+        padding: 2rem;
+        line-height: 1.6;
+        color: var(--dark-text);
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 3rem;
+      }
+
+      .header h1 {
+        color: var(--primary-color);
+        margin-bottom: 0.5rem;
+      }
+
+      .header p {
+        font-size: 1.1rem;
+        color: #666;
+        max-width: 600px;
+        margin: 0 auto;
+      }
+
+      /* Demo Controls */
+      .demo-controls {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        margin-bottom: 2rem;
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .control-group {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .control-group label {
+        font-weight: 600;
+        min-width: 120px;
+      }
+
+      .control-group input[type="range"] {
+        flex: 1;
+        max-width: 200px;
+      }
+
+      .control-group .value-display {
+        font-family: 'Courier New', monospace;
+        background: #f8f9fa;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        min-width: 60px;
+        text-align: center;
+      }
+
+      .control-group button {
+        background: var(--primary-color);
+        color: white;
+        border: none;
+        padding: 0.5rem 1rem;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.9rem;
+      }
+
+      .control-group button:hover {
+        background: #0056b3;
+      }
+
+      /* Demo Container */
+      .demo-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 2rem;
+        margin-bottom: 2rem;
+        max-width: 1200px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      /* Demo Cards */
+      .demo-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: var(--shadow);
+        text-align: center;
+        transition: transform 0.2s ease;
+      }
+
+      .demo-card:hover {
+        transform: translateY(-2px);
+      }
+
+      .demo-card h3 {
+        margin-top: 0;
+        color: var(--primary-color);
+      }
+
+      .demo-card p {
+        color: #666;
+        font-size: 0.9rem;
+        margin-bottom: 1.5rem;
+      }
+
+      /* Flip Container */
+      .flip-container {
+        perspective: 1000px;
+        width: 250px;
+        height: 250px;
+        margin: 0 auto;
+        cursor: auto;
+        position: relative;
+      }
+
+      .flip-inner {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        transform-style: preserve-3d;
+        transition: transform 0.6s ease;
+      }
+
+      .flipped .flip-inner {
+        transform: rotateY(180deg);
+      }
+
+      .flip-front,
+      .flip-back {
+        position: absolute;
+        top: 0;
+        left: 0;
+        backface-visibility: hidden;
+        width: 100%;
+        height: 100%;
+        border: 2px solid var(--border-color);
+        border-radius: 8px;
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .flip-back {
+        transform: rotateY(180deg);
+        background: linear-gradient(135deg, var(--success-color), #20c997);
+        color: white;
+        font-size: 1.2rem;
+        font-weight: bold;
+      }
+
+      /* Alpha Mask Events Styling */
+      .alpha-mask-events {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        transition: all 0.2s ease;
+      }
+
+      /* Visual feedback for opaque regions */
+      .alpha-mask-events.opaque-hover {
+        filter: brightness(1.1) drop-shadow(0 0 10px rgba(0,123,255,0.3));
+        transform: scale(1.02);
+      }
+
+      /* Stats Display */
+      .stats-container {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        margin-bottom: 2rem;
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1rem;
+      }
+
+      .stat-item {
+        text-align: center;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 6px;
+      }
+
+      .stat-value {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: var(--primary-color);
+      }
+
+      .stat-label {
+        font-size: 0.9rem;
+        color: #666;
+        margin-top: 0.25rem;
+      }
+
+      /* Log Display */
+      .log-container {
+        background: #1e1e1e;
+        color: #f8f8f2;
+        padding: 1rem;
+        border-radius: 8px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.85rem;
+        max-height: 200px;
+        overflow-y: auto;
+        margin-top: 1rem;
+      }
+
+      .log-entry {
+        margin-bottom: 0.25rem;
+        padding: 0.25rem;
+        border-radius: 2px;
+      }
+
+      .log-entry.info {
+        background: rgba(52, 152, 219, 0.2);
+      }
+
+      .log-entry.success {
+        background: rgba(46, 204, 113, 0.2);
+      }
+
+      .log-entry.warning {
+        background: rgba(241, 196, 15, 0.2);
+      }
+
+      .log-entry.error {
+        background: rgba(231, 76, 60, 0.2);
+      }
+
+      /* Responsive Design */
+      @media (max-width: 768px) {
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            background-color: #f4f7f9;
-            color: #333;
-            text-align: center;
-            padding: 20px;
-            box-sizing: border-box;
+          padding: 1rem;
         }
-        h1 {
-            color: #1a2b48;
-            margin-bottom: 0.5em;
+        
+        .demo-container {
+          grid-template-columns: 1fr;
         }
-        p {
-            max-width: 500px;
-            line-height: 1.6;
-            margin-bottom: 2em;
+        
+        .control-group {
+          flex-direction: column;
+          align-items: stretch;
         }
-        .image-container {
-            padding: 20px;
-            background-color: #ffffff;
-            border-radius: 12px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
-            display: inline-block; /* Fit container to image */
+        
+        .control-group label {
+          min-width: auto;
         }
-        #demoImage {
-            display: block; /* Remove extra space below image */
-            width: 250px;
-            height: 250px;
-            border: 4px dashed transparent; /* Placeholder for visual feedback */
-            /* transition removed to prevent potential ResizeObserver loops */
-            background-color: #e0e8ef; /* Light background to see transparency */
-            cursor: default; /* Default cursor */
-        }
-        /* Style applied by JS when hovering over opaque pixels */
-        #demoImage.opaque-hover {
-            border-color: #4CAF50; /* Green dashed border */
-            cursor: pointer; /* Pointer cursor */
-        }
-        code {
-            background-color: #e0e8ef;
-            padding: 0.2em 0.4em;
-            border-radius: 3px;
-            font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
-        }
-        a {
-            color: #007bff;
-            text-decoration: none;
-        }
-        a:hover {
-            text-decoration: underline;
-        }
+      }
     </style>
-    <!-- 1. Optionally Include the library from local build -->
-    <!-- <script src="../dist/alpha-mask-events.umd.min.js"></script> -->
 
-    <script src="https://cdn.jsdelivr.net/npm/alpha-mask-events@0.9/dist/alpha-mask-events.umd.min.js"></script>
-</head>
-<body>
 
-    <h1>Alpha Mask Events Demo</h1>
-
-    <p>
-        This demo showcases the <a href="https://github.com/YourUsername/alpha-mask-events" target="_blank"><code>alpha-mask-events</code></a> library.
-        Hover your mouse over the image below. Notice how the border turns green and the cursor changes to a pointer <strong>only</strong> when you are over the non-transparent (opaque) parts of the graphic. Clicking is also restricted to these areas.
-    </p>
-
-    <div class="image-container">
-        <img
-            src="noun-open-source-5318532.png"
-            alt="Open Source Icon"
-            class="alpha-mask-events"
-            id="demoImage"
-            crossorigin="anonymous"
-        />
-        <!-- The class="alpha-mask-events" triggers the library -->
+        <script src="https://cdn.jsdelivr.net/npm/alpha-mask-events@0.9/dist/alpha-mask-events.umd.min.js"></script>
+  </head>
+  <body>
+    <div class="header">
+      <h1>Alpha Mask Events - Interactive Demo</h1>
+      <p>
+        Click only on the <strong>opaque (solid)</strong> parts of the images below. 
+        Transparent areas will be click-through, while solid areas trigger interactions.
+        Watch the real-time statistics and try adjusting the transparency threshold.
+      </p>
     </div>
 
+    <!-- Demo Controls -->
+    <div class="demo-controls">
+      <h3>Live Controls</h3>
+      <div class="control-group">
+        <label for="threshold-slider">Transparency Threshold:</label>
+        <input type="range" id="threshold-slider" min="0" max="1" step="0.01" value="0.95" />
+        <span class="value-display" id="threshold-value">0.95</span>
+      </div>
+      <div class="control-group">
+        <label for="log-toggle">Debug Logging:</label>
+        <input type="checkbox" id="log-toggle" checked />
+        <button id="clear-stats">Clear Statistics</button>
+        <button id="reset-demo">Reset Demo</button>
+      </div>
+    </div>
+
+    <!-- Statistics Display -->
+    <div class="stats-container">
+      <h3>Real-time Statistics</h3>
+      <div class="stats-grid">
+        <div class="stat-item">
+          <div class="stat-value" id="total-clicks">0</div>
+          <div class="stat-label">Total Clicks</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="opaque-clicks">0</div>
+          <div class="stat-label">Opaque Clicks</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="transparent-clicks">0</div>
+          <div class="stat-label">Transparent Clicks</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="registered-elements">0</div>
+          <div class="stat-label">Registered Elements</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="current-threshold">0.95</div>
+          <div class="stat-label">Current Threshold</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="avg-response-time">0ms</div>
+          <div class="stat-label">Avg Response Time</div>
+        </div>
+      </div>
+      <div class="log-container" id="debug-log"></div>
+    </div>
+
+    <!-- Demo Container -->
+    <div class="demo-container">
+      <!-- Demo Card 1: Basic Flip -->
+      <div class="demo-card">
+        <h3>Basic Flip Card</h3>
+        <p>Click on the opaque parts of the image to flip it. Notice how transparent areas don't respond to clicks.</p>
+        <div class="flip-container" id="flip1">
+          <div class="flip-inner">
+            <img
+              src="https://cdn.statically.io/gh/themorgantown/alpha-mask-events/651490d0c6b9aa2246f1d9e3188d1419e971995c/demo/noun-open-source-5318532.png" 
+              alt="Open Source Icon"
+              class="alpha-mask-events flip-front" 
+              crossorigin="anonymous" 
+            />
+            <div class="flip-back">Flipped! 🎉</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Demo Card 2: Threshold Comparison -->
+      <div class="demo-card">
+        <h3>Threshold Comparison</h3>
+        <p>This uses a lower threshold (0.5) to show more pixels as clickable.</p>
+        <div class="flip-container" id="flip2">
+          <div class="flip-inner">
+            <img 
+              src="https://cdn.statically.io/gh/themorgantown/alpha-mask-events/651490d0c6b9aa2246f1d9e3188d1419e971995c/demo/noun-open-source-5318532.png" 
+              alt="Open Source Icon" 
+              class="alpha-mask-events flip-front" 
+              crossorigin="anonymous"
+              data-threshold="0.5"
+            />
+            <div class="flip-back">Lower Threshold! 🔧</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Demo Card 3: Manual Registration -->
+      <div class="demo-card">
+        <h3>Manual Registration</h3>
+        <p>This image is registered manually via JavaScript API instead of using the CSS class.</p>
+        <div class="flip-container" id="flip3">
+          <div class="flip-inner">
+            <img 
+              src="https://cdn.statically.io/gh/themorgantown/alpha-mask-events/651490d0c6b9aa2246f1d9e3188d1419e971995c/demo/noun-open-source-5318532.png" 
+              alt="Open Source Icon" 
+              class="flip-front manual-register" 
+              crossorigin="anonymous"
+              id="manual-img"
+            />
+            <div class="flip-back">Manual API! ⚙️</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Implementation Details -->
+    <div class="demo-controls">
+      <h3>How It Works</h3>
+      <p>
+        <strong>Alpha Mask Events</strong> uses the HTML5 Canvas API to sample pixel transparency in real-time:
+      </p>
+      <ul style="text-align: left; max-width: 600px; margin: 0 auto;">
+        <li><strong>Canvas Sampling:</strong> Creates off-screen canvas to read image alpha channel data</li>
+        <li><strong>Real-time Hit Testing:</strong> Samples pixels under mouse cursor using <code>getImageData()</code></li>
+        <li><strong>Dynamic CSS:</strong> Adjusts <code>pointer-events</code> property based on transparency</li>
+        <li><strong>Performance Optimized:</strong> Uses <code>requestAnimationFrame</code> throttling and <code>ResizeObserver</code></li>
+        <li><strong>Cross-Origin Safe:</strong> Handles CORS with <code>crossorigin="anonymous"</code> attribute</li>
+      </ul>
+    </div>
 
     <script>
-        // 2. Initialize the library
-        // This automatically scans for elements with class="alpha-mask-events"
-        AlphaMaskEvents.init({
-            log: true // Enable console logs for debugging
+      // Demo Statistics and State
+      const stats = {
+        totalClicks: 0,
+        opaqueClicks: 0,
+        transparentClicks: 0,
+        registeredElements: 0,
+        responseTimes: [],
+        currentThreshold: 0.95
+      };
+
+      // Debug logging
+      let debugEnabled = true;
+      const logContainer = document.getElementById('debug-log');
+
+      function addLogEntry(message, type = 'info') {
+        if (!debugEnabled) return;
+        
+        const entry = document.createElement('div');
+        entry.className = `log-entry ${type}`;
+        entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        logContainer.appendChild(entry);
+        logContainer.scrollTop = logContainer.scrollHeight;
+        
+        // Keep only last 50 entries
+        while (logContainer.children.length > 50) {
+          logContainer.removeChild(logContainer.firstChild);
+        }
+      }
+
+      function updateStats() {
+        document.getElementById('total-clicks').textContent = stats.totalClicks;
+        document.getElementById('opaque-clicks').textContent = stats.opaqueClicks;
+        document.getElementById('transparent-clicks').textContent = stats.transparentClicks;
+        document.getElementById('registered-elements').textContent = stats.registeredElements;
+        document.getElementById('current-threshold').textContent = stats.currentThreshold;
+        
+        const avgTime = stats.responseTimes.length > 0 
+          ? Math.round(stats.responseTimes.reduce((a, b) => a + b, 0) / stats.responseTimes.length)
+          : 0;
+        document.getElementById('avg-response-time').textContent = `${avgTime}ms`;
+      }
+
+      // Initialize Alpha Mask Events
+      let manager;
+      
+      function initializeAME() {
+        const startTime = performance.now();
+        
+        // Initialize with logging enabled
+        manager = AlphaMaskEvents.init({ 
+          threshold: stats.currentThreshold, 
+          log: debugEnabled 
+        });
+        
+        addLogEntry(`Alpha Mask Events initialized in ${Math.round(performance.now() - startTime)}ms`, 'success');
+        
+        // Count registered elements
+        stats.registeredElements = document.querySelectorAll('.alpha-mask-events').length;
+        
+        // Manual registration for the third demo
+        const manualImg = document.getElementById('manual-img');
+        if (manualImg) {
+          AlphaMaskEvents.register(manualImg, { threshold: 0.8 });
+          stats.registeredElements++;
+          addLogEntry('Manually registered element with threshold 0.8', 'info');
+        }
+        
+        // Register element with custom threshold (this is already detected by the class)
+        const customThresholdImg = document.querySelector('[data-threshold="0.5"]');
+        if (customThresholdImg) {
+          // This element already has the class, so it's auto-registered
+          // We just need to update its threshold
+          AlphaMaskEvents.register(customThresholdImg, { threshold: 0.5 });
+          addLogEntry('Updated element with custom threshold 0.5', 'info');
+        }
+        
+        updateStats();
+      }
+
+      // Event Listeners Setup
+      function setupEventListeners() {
+        // Threshold slider
+        const thresholdSlider = document.getElementById('threshold-slider');
+        const thresholdValue = document.getElementById('threshold-value');
+        
+        thresholdSlider.addEventListener('input', (e) => {
+          const newThreshold = parseFloat(e.target.value);
+          stats.currentThreshold = newThreshold;
+          thresholdValue.textContent = newThreshold;
+          
+          // Update global threshold
+          AlphaMaskEvents.setThreshold(newThreshold);
+          addLogEntry(`Threshold updated to ${newThreshold}`, 'info');
+          updateStats();
         });
 
-        // 3. Add visual feedback using the library's custom events
-        const imgElement = document.getElementById('demoImage');
+        // Debug logging toggle
+        const logToggle = document.getElementById('log-toggle');
+        logToggle.addEventListener('change', (e) => {
+          debugEnabled = e.target.checked;
+          addLogEntry(`Debug logging ${debugEnabled ? 'enabled' : 'disabled'}`, 'info');
+        });
 
-        if (imgElement) {
-            // Event when mouse enters an opaque pixel area
-            imgElement.addEventListener('alpha-mask-over', () => {
-                imgElement.classList.add('opaque-hover');
-            });
+        // Clear statistics
+        document.getElementById('clear-stats').addEventListener('click', () => {
+          stats.totalClicks = 0;
+          stats.opaqueClicks = 0;
+          stats.transparentClicks = 0;
+          stats.responseTimes = [];
+          logContainer.innerHTML = '';
+          updateStats();
+          addLogEntry('Statistics cleared', 'warning');
+        });
 
-            // Event when mouse leaves an opaque pixel area
-            // (or enters a transparent area)
-            imgElement.addEventListener('alpha-mask-out', () => {
-                imgElement.classList.remove('opaque-hover');
-            });
+        // Reset demo
+        document.getElementById('reset-demo').addEventListener('click', () => {
+          // Reset all flipped cards
+          document.querySelectorAll('.flip-container').forEach(container => {
+            container.classList.remove('flipped');
+          });
+          addLogEntry('Demo reset - all cards flipped back', 'info');
+        });
 
-            // Optional: Add click listener
-            // This will only fire if the click happened on an opaque pixel
-            // because the library sets `pointer-events: none` on transparent areas.
-            imgElement.addEventListener('click', (event) => {
-                console.log('Clicked on an opaque pixel!', event.offsetX, event.offsetY);
-                // Add any interaction you want here, e.g., alert('Clicked opaque area!');
-            });
-        } else {
-            console.error('Demo image element not found.');
-        }
+        // Add click listeners to flip containers for transparent area clicks
+        document.querySelectorAll('.flip-container').forEach((container, index) => {
+          container.addEventListener('click', function(e) {
+            // Only handle clicks that weren't on images (transparent areas or container background)
+            if (e.target.tagName !== 'IMG') {
+              const startTime = performance.now();
+              stats.totalClicks++;
+              stats.transparentClicks++;
+              
+              addLogEntry(`Click on transparent area/background of container ${index + 1} - NO FLIP`, 'warning');
+              
+              const responseTime = performance.now() - startTime;
+              stats.responseTimes.push(responseTime);
+
+              // Keep only last 20 response times for averaging
+              if (stats.responseTimes.length > 20) {
+                stats.responseTimes.shift();
+              }
+              
+              updateStats();
+            }
+          });
+        });
+
+        // Add visual feedback for alpha-mask events
+        document.querySelectorAll('.alpha-mask-events').forEach(img => {
+          // Track mouse state for better click detection
+          let isOverOpaque = false;
+          
+          img.addEventListener('alpha-mask-over', () => {
+            img.classList.add('opaque-hover');
+            isOverOpaque = true;
+            addLogEntry(`Mouse entered opaque region of ${img.alt}`, 'info');
+          });
+
+          img.addEventListener('alpha-mask-out', () => {
+            img.classList.remove('opaque-hover');
+            isOverOpaque = false;
+            addLogEntry(`Mouse left opaque region of ${img.alt}`, 'info');
+          });
+          
+          // Add click listener directly to the image to catch opaque clicks
+          img.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent container click
+            const container = img.closest('.flip-container');
+            const index = Array.from(document.querySelectorAll('.flip-container')).indexOf(container);
+            
+            stats.totalClicks++;
+            stats.opaqueClicks++;
+            container.classList.toggle('flipped');
+            addLogEntry(`Flip container ${index + 1} clicked (opaque area) - FLIPPED!`, 'success');
+            updateStats();
+          });
+        });
+      }
+
+      // Initialize everything when DOM is ready
+      document.addEventListener('DOMContentLoaded', () => {
+        addLogEntry('DOM loaded, initializing demo...', 'info');
+        initializeAME();
+        setupEventListeners();
+        addLogEntry('Demo initialization complete!', 'success');
+      });
+
+            // Add some performance monitoring
+      window.addEventListener('load', () => {
+        addLogEntry(`Page fully loaded in ${Math.round(performance.now())}ms`, 'success');
+      });
     </script>
+  </body>
+</html>
+    </script>
+  </body>
+</html>
+  </head>
+  <body>
+    <h1>Clickable Transparency Demo</h1>
+    <p>Click on the solid part of the image to flip it.</p>
+    <p>Offscreen Canvas for Pixel Inspection
+      The code creates a hidden (offscreen) canvas for each flip container:</p>
+      
+      An offscreen canvas is used so that the image's pixel data can be inspected without modifying what the user sees.
+      The canvas’s dimensions are set on the load event of the image to match its natural (intrinsic) width and height. This ensures that pixel values (especially the alpha channel) are read correctly.
+      Event Listeners
+      Two main event listeners are added to each flip container:
+      
+      mousemove
+      
+      Calculates the mouse position relative to the actual image.
+      Uses getBoundingClientRect() to get the rendered dimensions and position.
+      Determines the corresponding pixel coordinates on the offscreen canvas by applying a scale factor (canvas natural size divided by the displayed size).
+      Draws the front image onto the canvas and uses getImageData to read the alpha channel (fourth byte) of the pixel where the mouse is located.
+      If the alpha value is greater than 0 (i.e., the pixel is not fully transparent), the cursor changes to a pointer, suggesting that click interaction is possible.
+      click
+      <p></p>
+      Similar coordinate calculations are performed to translate the click position from the visible image coordinate system to the offscreen canvas coordinate system.
+      The image is drawn again onto the canvas, the pixel data is checked, and if the alpha channel indicates opacity, the container’s CSS class flipped is toggled.<p></p>
+      It also logs the time taken for the transparency check, which helps in diagnosing performance if needed.
+      Cross-Origin Image Handling
+      <p></p>
+      The crossOrigin="anonymous" attribute is used on the img tags. This allows the image to be loaded in a way that lets the canvas access its pixel data without being tainted by cross-origin security restrictions.
+      CSS Interaction (Outside the Script)
+      <p>
+      The script toggles a CSS class flipped on a container, which presumably is used to apply CSS transitions or transforms to create the flipping effect. This separation of concerns (logic in JS, styles in CSS) is a good practice.
+      In summary, the implementation leverages an offscreen canvas along with precise calculations of scaling between the rendered image and its natural size. This allows it to accurately determine whether a user’s click occurred on an opaque (non-transparent) pixel, enabling a selective flipping effect based on image content. </p>
 
-    <p>Here's how to set this up:</p>
-    <ol>
-      <li>Include the library in your HTML:</li>
-    </ol>
-    <pre><code>&lt;script src="../dist/alpha-mask-events.umd.min.js"&gt;&lt;/script&gt;
-  </code></pre>
-
-  <p> Or <a href="https://www.jsdelivr.com/package/npm/alpha-mask-events">use the CDN</a>. </p>
-    <ol start="2">
-      <li>Initialize the library:</li>
-    </ol>
-    <pre><code>AlphaMaskEvents.init({
-    log: true // Enable console logs for debugging
-  });
-  </code></pre>
-    <ol start="3">
-      <li>Add event listeners to your image element:</li>
-    </ol>
-    <pre><code>
-  const imgElement = document.getElementById('demoImage');
-
-  imgElement.addEventListener('alpha-mask-over', () => {
-    imgElement.classList.add('opaque-hover');
-  });
-
-  imgElement.addEventListener('alpha-mask-out', () => {
-    imgElement.classList.remove('opaque-hover');
-  });
-
-  imgElement.addEventListener('click', (event) => {
-    console.log('Clicked on an opaque pixel!', event.offsetX, event.offsetY);
-  });
-  </code></pre>
-
-
-</body>
+    <script>
+      // Add click event listener to each flip container to toggle the "flipped" class
+      document.querySelectorAll('.flip-container').forEach(container => {
+      container.addEventListener('click', function() {
+        this.classList.toggle('flipped');
+      });
+      });
+    </script>
+   
+  </body>
 </html>
