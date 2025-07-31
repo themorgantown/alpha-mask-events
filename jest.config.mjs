@@ -11,12 +11,12 @@ export default {
   
   // Mock image imports and canvas module in tests
   moduleNameMapper: {
-    '\\.(png|jpg|jpeg|gif|svg)$': '<rootDir>/__tests__/__mocks__/fileMock.js',
+    '\\.(png|jpg|jpeg|gif|svg|webp|avif|bmp|tiff|ico)$': '<rootDir>/__tests__/__mocks__/fileMock.js',
     '^canvas$': '<rootDir>/__tests__/__mocks__/canvasMock.js'
   },
-  
+
   // Process environment for ESM compatibility
-  testPathIgnorePatterns: ['/node_modules/', '/__tests__/__mocks__/', '/__tests__/fixtures/'],
+  testPathIgnorePatterns: ['/node_modules/', '/__tests__/__mocks__/', '/__tests__/fixtures/', '/__tests__/emoji-summary-reporter.js'],
   moduleFileExtensions: ['js', 'mjs', 'jsx', 'json', 'node'],
   
   // Allow transforms on all packages, important for ES modules
@@ -29,5 +29,20 @@ export default {
   verbose: true,
   
   // Set reasonable timeouts for async tests
-  testTimeout: 15000
+  testTimeout: 15000,
+  
+  // Custom reporters for better output
+  reporters: [
+    'default',
+    '<rootDir>/__tests__/emoji-summary-reporter.js'
+  ],
+  
+  // Coverage configuration with emojis
+  coverageReporters: ['text', 'text-summary', 'html'],
+  collectCoverageFrom: [
+    'src/**/*.js',
+    'bin/**/*.js',
+    '!**/__tests__/**',
+    '!**/node_modules/**'
+  ]
 };

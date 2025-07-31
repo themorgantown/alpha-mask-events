@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Build Status](https://img.shields.io/badge/build-passing-brightgreen.svg)](https://github.com/themorgantown/alpha-mask-events)
 
-> Enable click-through on transparent parts of PNGs and background-images, making irregularly shaped UI elements behave naturally.
+> Enable click-through on transparent parts of images (PNG, WebP, AVIF, etc.) and background-images, making irregularly shaped UI elements behave naturally.
 
 ![Demo GIF](https://example.com/demo-of-alpha-mask-events.gif) 
 
@@ -15,7 +15,24 @@ Ever been frustrated when:
 - You wanted to stack elements and have clicks "fall through" the transparent regions?
 - You just want to show the 'hand' cursor on SOLID parts of images? 
 
-This lightweight library solves these problems with minimal setup.
+This lightweight library solves these problems with minimal setup and supports all modern image formats with transparency.
+
+## Supported Image Formats
+
+### ✅ Full Transparency Support
+- **PNG** - Universal browser support, full alpha channel
+- **WebP** - Modern browsers (Chrome 23+, Firefox 65+, Safari 14+), full alpha channel  
+- **AVIF** - Latest browsers (Chrome 85+, Firefox 93+, Safari 16.4+), full alpha channel
+- **SVG** - Modern browsers, transparency via CSS/opacity
+
+### ⚠️ Limited Transparency Support  
+- **GIF** - Universal support, binary transparency only
+- **TIFF** - Limited browser support, some transparency capability
+- **ICO** - Limited browser support, basic transparency
+
+### ❌ No Transparency (processed with warnings)
+- **JPEG/JPG** - Universal support, no transparency
+- **BMP** - Limited support, no transparency
 
 ## Table of Contents
 - [Installation](#installation)
@@ -47,7 +64,10 @@ Add `.alpha-mask-events` class to any image or element with background-image:
 
 ```html
 <img src="logo.png" class="alpha-mask-events" />
+<img src="hero.webp" class="alpha-mask-events" />
+<img src="avatar.avif" class="alpha-mask-events" />
 <div class="alpha-mask-events" style="background-image: url('shape.png')"></div>
+<div class="alpha-mask-events" style="background-image: url('icon.webp')"></div>
 ```
 
 Initialize the library:
@@ -247,16 +267,50 @@ element.addEventListener('alpha-mask-over', (event: AlphaMaskEvent) => {
 
 ## CLI Usage
 
-Generate compact masks for opaque regions in PNG files (useful for server-side optimizations).
+Generate compact masks for opaque regions in transparent images (useful for server-side optimizations).
 
 ```bash
 npx ame-generate-masks <images...> --out <file> [options]
 ```
 
+**Supported formats**: PNG, WebP, AVIF, GIF, BMP, TIFF
+
+**Examples:**
+```bash
+# Process multiple PNG files
+npx ame-generate-masks sprites/*.png --out masks.json
+
+# Process mixed formats with custom threshold
+npx ame-generate-masks logo.png hero.webp avatar.avif --out masks.json --threshold 0.2
+
+# Process with blur for smoother edges
+npx ame-generate-masks button.png --out button-mask.json --blur 2
+```
+
+**Options:**
 - **<images...>**: One or more image paths or glob patterns
 - **--out** (string, required): Path to output JSON file
 - **--threshold** (number, default: `0.1`): Opaque mask threshold (0–1)
 - **--blur** (number, default: `1`): Box blur radius in pixels applied to alpha channel before thresholding
+
+**Output format:**
+```json
+{
+  "logo.png": {
+    "width": 256,
+    "height": 256,
+    "rects": [
+      { "x": 10, "y": 10, "w": 50, "h": 1 },
+      { "x": 8, "y": 11, "w": 54, "h": 1 }
+    ]
+  },
+  "hero.webp": {
+    "width": 800,
+    "height": 600,
+    "rects": [...]
+  }
+}
+```
 
 ## Advanced Examples
 

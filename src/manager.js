@@ -5,6 +5,73 @@
 const DEFAULT_THRESHOLD = 0.999; // Pixels with alpha > this are considered opaque
 
 /**
+ * Supported image formats with transparency capability
+ */
+const SUPPORTED_FORMATS = {
+  // Formats with full alpha channel support
+  'png': { hasAlpha: true, browserSupport: 'universal' },
+  'webp': { hasAlpha: true, browserSupport: 'modern' }, // Chrome 23+, Firefox 65+, Safari 14+
+  'avif': { hasAlpha: true, browserSupport: 'latest' },  // Chrome 85+, Firefox 93+, Safari 16.4+
+  
+  // Formats with limited transparency
+  'gif': { hasAlpha: 'limited', browserSupport: 'universal' }, // Binary transparency only
+  
+  // Formats without transparency (processed but with warnings)
+  'jpg': { hasAlpha: false, browserSupport: 'universal' },
+  'jpeg': { hasAlpha: false, browserSupport: 'universal' },
+  'bmp': { hasAlpha: false, browserSupport: 'limited' },
+  'tiff': { hasAlpha: 'limited', browserSupport: 'limited' },
+  'ico': { hasAlpha: 'limited', browserSupport: 'limited' },
+  'svg': { hasAlpha: true, browserSupport: 'modern' } // SVG can have transparency via CSS/opacity
+};
+
+/**
+ * Detect and validate image format from URL
+ * @param {string} src - Image source URL
+ * @returns {Object} Format information
+ */
+function detectImageFormat(src) {
+  // Extract extension from URL (handle query params, fragments)
+  const urlPath = src.split('?')[0].split('#')[0];
+  const extension = urlPath.split('.').pop()?.toLowerCase();
+  
+  if (!extension) {
+    return { format: 'unknown', info: null, warning: 'Unable to detect image format from URL' };
+  }
+  
+  const formatInfo = SUPPORTED_FORMATS[extension];
+  if (!formatInfo) {
+    return { 
+      format: extension, 
+      info: null, 
+      warning: `Unsupported or unknown format: ${extension}. Transparency detection may not work.` 
+    };
+  }
+  
+  const warnings = [];
+  
+  // Add browser support warnings
+  if (formatInfo.browserSupport === 'modern') {
+    warnings.push(`${extension.toUpperCase()} requires modern browser support`);
+  } else if (formatInfo.browserSupport === 'latest') {
+    warnings.push(`${extension.toUpperCase()} requires very recent browser support`);
+  }
+  
+  // Add transparency capability warnings
+  if (formatInfo.hasAlpha === false) {
+    warnings.push(`${extension.toUpperCase()} format does not support transparency`);
+  } else if (formatInfo.hasAlpha === 'limited') {
+    warnings.push(`${extension.toUpperCase()} has limited transparency support`);
+  }
+  
+  return {
+    format: extension,
+    info: formatInfo,
+    warning: warnings.length > 0 ? warnings.join('; ') : null
+  };
+}
+
+/**
  * Manager class that handles the core functionality for alpha mask event processing.
  *
  * This class maintains a registry of elements with alpha masks, processes pointer events,
@@ -96,6 +163,23 @@ export default class Manager {
         return;
     }
 
+    // Detect and validate image format
+    const formatDetection = detectImageFormat(src);
+    if (this.log && formatDetection.warning) {
+        console.warn(`AME: Format warning for ${src}: ${formatDetection.warning}`);
+    }
+    
+    // Enhanced logging for format detection
+    if (this.log) {
+        console.log(`AME: Detected format: ${formatDetection.format?.toUpperCase() || 'unknown'} for ${src}`);
+        if (formatDetection.info) {
+            const alphaSupportText = formatDetection.info.hasAlpha === true ? '✅ Full alpha' :
+                                   formatDetection.info.hasAlpha === 'limited' ? '⚠️ Limited alpha' :
+                                   '❌ No alpha';
+            console.log(`AME: Format capabilities - ${alphaSupportText}, Browser: ${formatDetection.info.browserSupport}`);
+        }
+    }
+
     // Create canvas and context immediately
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -163,6 +247,7 @@ export default class Manager {
             element: el,
             src,
             error: e.type || 'unknown',
+            format: formatDetection.format,
             timestamp: new Date().toISOString()
         };
         
@@ -173,11 +258,31 @@ export default class Manager {
         console.info('2. Verify CORS headers if cross-origin:', 
             src.startsWith('http') && !src.startsWith(window.location.origin) ? 
             '⚠️  Cross-origin detected' : '✓ Same-origin');
-        console.info('3. Ensure image format is supported (PNG, JPEG, WebP, etc.)');
+        console.info('3. Image format compatibility:');
+        if (formatDetection.format && formatDetection.info) {
+            console.info(`   • Format: ${formatDetection.format.toUpperCase()}`);
+            console.info(`   • Browser support: ${formatDetection.info.browserSupport}`);
+            console.info(`   • Alpha support: ${formatDetection.info.hasAlpha === true ? 'Full' : 
+                          formatDetection.info.hasAlpha === 'limited' ? 'Limited' : 'None'}`);
+            
+            // Format-specific advice
+            if (formatDetection.format === 'webp') {
+                console.info('   💡 WebP: Ensure browser supports WebP (Chrome 23+, Firefox 65+, Safari 14+)');
+            } else if (formatDetection.format === 'avif') {
+                console.info('   💡 AVIF: Requires very recent browser (Chrome 85+, Firefox 93+, Safari 16.4+)');
+            } else if (!formatDetection.info.hasAlpha) {
+                console.info('   ⚠️  This format doesn\'t support transparency');
+            }
+        } else {
+            console.info('   ⚠️  Unknown or unsupported format detected');
+            console.info('   📋 Fully supported: PNG, WebP, AVIF, GIF');
+            console.info('   📋 Partially supported: SVG, JPEG (no transparency), BMP, TIFF');
+        }
         console.info('4. Check network connectivity and server availability');
         console.info('💡 Alternative Solutions:');
         console.info('• Use the CLI tool to pre-generate masks: npx ame-generate-masks');
         console.info('• Implement server-side image processing');
+        console.info('• Use PNG format for maximum compatibility');
         console.info('• Use same-origin images when possible');
         console.groupEnd();
         

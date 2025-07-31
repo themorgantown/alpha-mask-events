@@ -34,7 +34,7 @@ function waitForImageLoad(entry, timeout = 1000) {
 
 
 // Create a more complete testing environment
-describe('Manager', () => {
+describe('⚙️  Manager Core Functionality', () => {
   let mgr;
   let originalImage;
   // Store original canvas methods
@@ -132,7 +132,7 @@ describe('Manager', () => {
     });
   });
 
-  test('add and remove element', async () => {
+  test('➕ add and remove element', async () => {
     const div = document.createElement('div');
     div.id = 'test-div';
     // Simulate background image via style attribute for MutationObserver test later if needed
@@ -161,7 +161,7 @@ describe('Manager', () => {
     expect(div.style.pointerEvents).not.toBe('none');
   });
 
-  test('setThreshold updates all registry entries', async () => {
+  test('🎯 setThreshold updates all registry entries', async () => {
     const div1 = document.createElement('div');
     div1.id = 'div1';
     div1.style.backgroundImage = 'url(test1.png)';
@@ -192,7 +192,7 @@ describe('Manager', () => {
 
   });
 
-  test('scan registers all .alpha-mask-events elements', async () => {
+  test('🔍 scan registers all .alpha-mask-events elements', async () => {
     document.body.innerHTML = `
       <img src="img1.png" class="alpha-mask-events" id="img1" />
       <div style="background-image: url(div-bg.png)" class="alpha-mask-events" id="div1"></div>

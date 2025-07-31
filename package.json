@@ -1,7 +1,7 @@
 {
   "name": "alpha-mask-events",
-  "version": "0.9.5",
-  "description": "Enable click‑through on transparent regions of images using alpha masks.",
+  "version": "1.0",
+  "description": "Enable click‑through on transparent regions of images (PNG, WebP, AVIF, GIF, SVG) using alpha masks.",
   "main": "dist/index.cjs.js",
   "module": "dist/index.esm.js",
   "browser": "dist/alpha-mask-events.umd.js",
@@ -14,6 +14,7 @@
   "scripts": {
     "build": "rollup -c",
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
+    "test:generate-images": "node __tests__/fixtures/create-test-images.js",
     "lint": "eslint src",
     "prepublishOnly": "npm run build && npm test"
   },
@@ -27,8 +28,11 @@
     "click-through",
     "transparent",
     "png",
+    "webp",
+    "avif",
+    "image-transparency",
     "pointer-events",
-    "image-transparency"
+    "transparency-detection"
   ],
   "author": "Daniel Morgan <ud4x5w82m@mozmail.com> (https://danielwmorgan.town)",
   "license": "MIT",
