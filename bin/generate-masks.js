@@ -17,11 +17,12 @@ import { createCanvas, loadImage } from 'canvas';
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 
-// Prevent CLI execution during test imports
-const isTestEnvironment = process.env.NODE_ENV === 'test' || process.env.JEST_WORKER_ID !== undefined;
+// Prevent CLI execution during test imports (but allow when called via execFile)
+const isTestEnvironment = process.env.NODE_ENV === 'test' && process.env.JEST_WORKER_ID !== undefined && !process.argv.includes('--out');
 
 let argv;
-if (!isTestEnvironment) {
+// Only parse arguments when not in test environment OR when explicitly called with arguments
+if (!isTestEnvironment || process.argv.includes('--out')) {
   argv = yargs(hideBin(process.argv))
     .usage('Usage: $0 <images...> --out [file] --threshold [num]')
     .demandCommand(1)
@@ -126,8 +127,8 @@ export function hasTransparency(imageData) {
   return false;
 }
 
-// Only run the main script if this file is executed directly (not imported for testing)
-if (import.meta.url === `file://${process.argv[1]}` && !isTestEnvironment) {
+// Only run the main script if this file is executed directly (and arguments are available)
+if (import.meta.url === `file://${process.argv[1]}` && argv) {
   (async () => {
     const output = {};
     const errors = [];
