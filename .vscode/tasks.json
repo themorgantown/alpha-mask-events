@@ -1,4 +1,77 @@
 {
 	"version": "2.0.0",
-	"tasks": []
+	"tasks": [
+		{
+			"type": "npm",
+			"script": "build",
+			"group": "build",
+			"label": "Build Project",
+			"detail": "Build the project using Rollup",
+			"problemMatcher": ["$tsc"],
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared",
+				"showReuseMessage": true,
+				"clear": false
+			}
+		},
+		{
+			"type": "npm", 
+			"script": "test",
+			"group": "test",
+			"label": "Run Tests",
+			"detail": "Run Jest tests with ES modules support",
+			"problemMatcher": [],
+			"presentation": {
+				"echo": true,
+				"reveal": "always", 
+				"focus": false,
+				"panel": "shared",
+				"showReuseMessage": true,
+				"clear": false
+			}
+		},
+		{
+			"type": "npm",
+			"script": "lint",
+			"group": "build",
+			"label": "Lint Code", 
+			"detail": "Run ESLint on source files",
+			"problemMatcher": ["$eslint-stylish"],
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false,
+				"panel": "shared", 
+				"showReuseMessage": true,
+				"clear": false
+			}
+		},
+		{
+			"type": "shell",
+			"command": "npm",
+			"args": ["run", "build", "&&", "npm", "test"],
+			"group": "build",
+			"label": "Build and Test",
+			"detail": "Build the project and run tests",
+			"problemMatcher": ["$tsc"],
+			"presentation": {
+				"echo": true,
+				"reveal": "always",
+				"focus": false, 
+				"panel": "shared",
+				"showReuseMessage": true,
+				"clear": false
+			}
+		},
+		{
+			"label": "Test Fix",
+			"type": "shell",
+			"command": "npm test",
+			"group": "test",
+			"isBackground": false
+		}
+	]
 }
