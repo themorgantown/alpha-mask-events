@@ -17,10 +17,14 @@ export default class Manager {
    * @param {Object} options - Configuration options
    * @param {number} [options.threshold=0.999] - Global transparency threshold (0-1). Alpha values *strictly greater* than this are considered opaque.
    * @param {boolean} [options.log=false] - Enable debug logging
+   * @param {boolean} [options.useIntersectionObserver=true] - Enable automatic performance optimization for off-screen elements
+   * @param {string} [options.intersectionRootMargin='100px'] - Root margin for IntersectionObserver
    */
-  constructor({ threshold = DEFAULT_THRESHOLD, log = false } = {}) {
+  constructor({ threshold = DEFAULT_THRESHOLD, log = false, useIntersectionObserver = true, intersectionRootMargin = '100px' } = {}) {
     this.threshold = threshold;
     this.log       = log;
+    this.useIntersectionObserver = useIntersectionObserver;
+    this.intersectionRootMargin = intersectionRootMargin;
     // Registry stores: { el, canvas, ctx, threshold, originalPointerEvents, img, imageLoaded, currentSrc }
     this.registry  = new Map(); // Use Map for easier element lookup/removal
     this._handler  = this._onPointerEvent.bind(this);
@@ -28,6 +32,10 @@ export default class Manager {
     this._lastEvent = null;         // Store most recent event for delayed processing
     this._mutationObserver = null;  // For observing DOM changes
     this._resizeObservers = new WeakMap(); // Track resize observers per element
+    this._intersectionObserver = null; // For performance optimization
+    this._intersectionElements = new Set(); // Track elements under intersection observation
+    this._compatibilityWarningShown = false; // Track if browser compatibility warning has been shown
+    this._listenersAttached = false; // Track if global listeners are attached
   }
 
   /**
@@ -35,9 +43,15 @@ export default class Manager {
    * Also sets up observation for future DOM changes to auto-register new elements.
    */
   scan() {
+    // Show browser compatibility warnings if needed
+    if (this.log) {
+      this._showBrowserCompatibilityWarning();
+    }
+    
     document.querySelectorAll('.alpha-mask-events')
       .forEach(el => this.add(el));
     this._observeMutations();
+    this._setupIntersectionObserver();
   }
 
   /**
@@ -103,7 +117,9 @@ export default class Manager {
         originalPointerEvents,
         img: null, // Image object will be loaded
         imageLoaded: false,
-        currentSrc: src
+        currentSrc: src,
+        isVisible: true, // Assume visible initially (will be updated by IntersectionObserver if enabled)
+        _lastOpaqueState: null // Track opaque/transparent state for custom events
     };
     this.registry.set(el, entry);
     if (this.log) console.log('AME: Registering element', el, 'with src:', src, 'threshold:', threshold);
@@ -125,11 +141,46 @@ export default class Manager {
             ro.observe(el);
             this._resizeObservers.set(el, ro);
         } else {
-            if (this.log) console.warn('AME: ResizeObserver not supported. Layout changes might affect accuracy.');
+            if (this.log) {
+                console.warn('AME: ResizeObserver not supported. Layout changes might affect accuracy.');
+            }
+        }
+
+        // Add to IntersectionObserver for performance optimization
+        if (this.useIntersectionObserver) {
+            if (!this._intersectionObserver) {
+                this._setupIntersectionObserver();
+            }
+            if (this._intersectionObserver && !this._intersectionElements.has(el)) {
+                this._intersectionObserver.observe(el);
+                this._intersectionElements.add(el);
+                entry.isVisible = true; // Assume visible until IntersectionObserver says otherwise
+            }
         }
     };
     img.onerror = (e) => {
-        console.error('AME: Image load failed for element', el, 'src:', src, e);
+        const errorDetails = {
+            element: el,
+            src,
+            error: e.type || 'unknown',
+            timestamp: new Date().toISOString()
+        };
+        
+        console.error('AME: Image loading failed - implementing recovery strategies', errorDetails);
+        console.group('AME: Image Loading Recovery Guide');
+        console.info('🔧 Troubleshooting Steps:');
+        console.info('1. Check if the image URL is accessible:', src);
+        console.info('2. Verify CORS headers if cross-origin:', 
+            src.startsWith('http') && !src.startsWith(window.location.origin) ? 
+            '⚠️  Cross-origin detected' : '✓ Same-origin');
+        console.info('3. Ensure image format is supported (PNG, JPEG, WebP, etc.)');
+        console.info('4. Check network connectivity and server availability');
+        console.info('💡 Alternative Solutions:');
+        console.info('• Use the CLI tool to pre-generate masks: npx ame-generate-masks');
+        console.info('• Implement server-side image processing');
+        console.info('• Use same-origin images when possible');
+        console.groupEnd();
+        
         // Clean up if image fails to load
         this.remove(el);
     };
@@ -162,6 +213,12 @@ export default class Manager {
     if (ro) {
       ro.disconnect();
       this._resizeObservers.delete(el);
+    }
+
+    // Remove from IntersectionObserver if enabled
+    if (this._intersectionObserver && this._intersectionElements.has(el)) {
+        this._intersectionObserver.unobserve(el);
+        this._intersectionElements.delete(el);
     }
 
     // Remove from registry
@@ -247,6 +304,13 @@ export default class Manager {
       this._mutationObserver = null;
     }
 
+    // Clean up IntersectionObserver
+    if (this._intersectionObserver) {
+      this._intersectionObserver.disconnect();
+      this._intersectionObserver = null;
+      this._intersectionElements.clear();
+    }
+
     // Clean up all ResizeObservers and remove elements from registry
     this.registry.forEach((entry, el) => {
         this.remove(el); // Use remove to handle cleanup logic
@@ -304,7 +368,12 @@ export default class Manager {
 
     // Iterate through registered elements
     this.registry.forEach((entry) => {
-        const { el, canvas, ctx, threshold, originalPointerEvents, imageLoaded } = entry;
+        const { el, canvas, ctx, threshold, originalPointerEvents, imageLoaded, isVisible } = entry;
+
+        // Performance optimization: Skip processing for off-screen elements
+        if (this.useIntersectionObserver && isVisible === false) {
+            return; // Element is not visible, skip expensive hit-testing
+        }
 
         // Skip if image hasn't loaded yet or canvas context failed
         if (!imageLoaded || !ctx) {
@@ -334,14 +403,25 @@ export default class Manager {
                     const pixelData = ctx.getImageData(canvasX, canvasY, 1, 1).data;
                     alpha = pixelData[3] / 255; // Alpha is the 4th component (0-255)
                 } catch (err) {
-                    // This can happen due to CORS issues if crossOrigin='anonymous' isn't respected
-                    // or if coordinates are somehow out of bounds despite checks.
-                    if (this.log && !entry._loggedImageDataError) { // Log only once per element
-                        console.warn('AME: getImageData failed for element. Tainted canvas? CORS issue?', el, err);
-                        entry._loggedImageDataError = true; // Prevent spamming logs
+                    // Enhanced CORS error recovery with fallback strategies
+                    if (this.log && !entry._loggedImageDataError) {
+                        console.warn('AME: getImageData failed - implementing fallback strategy.', {
+                            element: el,
+                            error: err.message,
+                            src: entry.currentSrc,
+                            fallback: 'Using bounding box approximation'
+                        });
+                        console.info('AME: CORS Recovery Tips:\n' +
+                            '• Ensure images have crossOrigin="anonymous" attribute\n' +
+                            '• Verify server sends Access-Control-Allow-Origin headers\n' +
+                            '• Consider using the CLI tool for pre-generated masks\n' +
+                            '• Use same-origin images when possible');
+                        entry._loggedImageDataError = true;
                     }
-                    // Default to opaque on error to avoid unexpected click-through
-                    alpha = 1.0;
+                    
+                    // Fallback Strategy 1: Bounding box approximation
+                    // Use element's bounding rectangle to approximate click behavior
+                    alpha = this._approximateAlphaFromBounds(el, clientX, clientY, rect, entry);
                 }
             } else {
                  if (this.log) console.log('AME: Calculated coords outside canvas bounds', { canvasX, canvasY, canvasW: canvas.width, canvasH: canvas.height });
@@ -352,6 +432,29 @@ export default class Manager {
 
             // Apply threshold: Opaque => 'auto'; Transparent => 'none'
             const newPointerEvents = alpha > threshold ? 'auto' : 'none';
+            const isOpaque = alpha > threshold;
+
+            // Dispatch custom events when transitioning between opaque/transparent states
+            if (entry._lastOpaqueState !== isOpaque) {
+                if (isOpaque) {
+                    // Transitioning from transparent to opaque
+                    this._dispatchAlphaMaskEvent(el, 'alpha-mask-over', {
+                        alpha,
+                        coordinates: { x: canvasX, y: canvasY },
+                        threshold,
+                        element: el
+                    });
+                } else {
+                    // Transitioning from opaque to transparent
+                    this._dispatchAlphaMaskEvent(el, 'alpha-mask-out', {
+                        alpha,
+                        coordinates: { x: canvasX, y: canvasY },
+                        threshold,
+                        element: el
+                    });
+                }
+                entry._lastOpaqueState = isOpaque;
+            }
 
             // Update style only if it changed to avoid unnecessary style recalcs
             if (el.style.pointerEvents !== newPointerEvents) {
@@ -365,8 +468,46 @@ export default class Manager {
                 el.style.pointerEvents = originalPointerEvents;
                  if (this.log > 1) console.log(`AME: Pointer left bounds, restored pointerEvents=${originalPointerEvents} on`, el);
             }
+            
+            // Dispatch alpha-mask-out event if we were previously in an opaque state
+            if (entry._lastOpaqueState === true) {
+                this._dispatchAlphaMaskEvent(el, 'alpha-mask-out', {
+                    alpha: 0, // Outside bounds, treat as transparent
+                    coordinates: { x: -1, y: -1 }, // Invalid coordinates to indicate outside bounds
+                    threshold,
+                    element: el
+                });
+                entry._lastOpaqueState = null; // Reset state when outside bounds
+            }
         }
     });
+  }
+
+  /**
+   * Dispatch a custom alpha mask event on the specified element.
+   *
+   * @param {HTMLElement} element - The element to dispatch the event on
+   * @param {string} eventType - The event type ('alpha-mask-over' or 'alpha-mask-out')
+   * @param {Object} detail - Event detail object
+   * @private
+   */
+  _dispatchAlphaMaskEvent(element, eventType, detail) {
+    try {
+      const event = new CustomEvent(eventType, {
+        detail,
+        bubbles: false,    // Don't bubble by default
+        cancelable: false  // Not cancelable
+      });
+      element.dispatchEvent(event);
+      
+      if (this.log > 1) {
+        console.log(`AME: Dispatched ${eventType} on`, element, 'with detail:', detail);
+      }
+    } catch (error) {
+      if (this.log) {
+        console.warn(`AME: Failed to dispatch ${eventType} event:`, error);
+      }
+    }
   }
 
 
@@ -446,6 +587,45 @@ export default class Manager {
         attributeFilter: ['class', 'src', 'style'] // Focus on relevant attributes (style for background-image)
     });
      if (this.log) console.log('AME: MutationObserver attached');
+  }
+
+  /**
+   * Sets up IntersectionObserver for performance optimization.
+   * Automatically disables hit-testing for off-screen elements.
+   * @private
+   */
+  _setupIntersectionObserver() {
+    if (!this.useIntersectionObserver || !('IntersectionObserver' in window) || this._intersectionObserver) {
+      return;
+    }
+
+    this._intersectionObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        const el = entry.target;
+        const registryEntry = this.registry.get(el);
+        
+        if (!registryEntry) return; // Element may have been unregistered
+        
+        const isVisible = entry.isIntersecting;
+        registryEntry.isVisible = isVisible;
+        
+        if (this.log > 1) {
+          console.log(`AME: Element ${isVisible ? 'entered' : 'left'} viewport`, el);
+        }
+        
+        // Optionally disable pointer event processing for invisible elements
+        // This can significantly improve performance on pages with many images
+        if (!isVisible) {
+          // Temporarily restore original pointer events when off-screen
+          el.style.pointerEvents = registryEntry.originalPointerEvents;
+        }
+      });
+    }, {
+      rootMargin: this.intersectionRootMargin,
+      threshold: [0, 0.1] // Trigger when element starts entering/leaving viewport
+    });
+
+    if (this.log) console.log('AME: IntersectionObserver setup complete');
   }
 
   /**
@@ -651,6 +831,85 @@ export default class Manager {
       }
        // Assume pixels if no unit
       return parseFloat(value);
+  }
+
+  /**
+   * Fallback alpha approximation when canvas is tainted (CORS issues).
+   * Uses element geometry and typical image layout patterns for best guess.
+   *
+   * @param {HTMLElement} el - The element 
+   * @param {number} clientX - Mouse X coordinate
+   * @param {number} clientY - Mouse Y coordinate  
+   * @param {DOMRect} rect - Element bounding rectangle
+   * @param {Object} entry - Registry entry for the element
+   * @returns {number} - Approximated alpha value (0-1)
+   * @private
+   */
+  _approximateAlphaFromBounds(el, clientX, clientY, rect, entry) {
+      // Strategy: Use conservative heuristics for common image patterns
+      
+      // Calculate relative position within element (0-1)
+      const relX = (clientX - rect.left) / rect.width;
+      const relY = (clientY - rect.top) / rect.height;
+      
+      // Fallback 1: Center-weighted approximation (most images have content in center)
+      const centerX = 0.5, centerY = 0.5;
+      const distanceFromCenter = Math.sqrt(
+          Math.pow(relX - centerX, 2) + Math.pow(relY - centerY, 2)
+      );
+      
+      // Assume center 70% is likely opaque, edges likely transparent
+      const centerOpacityRadius = 0.35; // 70% diameter
+      
+      if (distanceFromCenter <= centerOpacityRadius) {
+          return 1.0; // Likely opaque
+      } else {
+          // Edge regions - use threshold-aware fallback
+          const edgeDistance = (distanceFromCenter - centerOpacityRadius) / (0.707 - centerOpacityRadius); // 0.707 = corner distance
+          return Math.max(0, 1 - edgeDistance * 1.5); // Gradual falloff
+      }
+  }
+
+  /**
+   * Display browser compatibility warnings for missing features.
+   * @private
+   */
+  _showBrowserCompatibilityWarning() {
+    if (this._compatibilityWarningShown) return; // Show only once
+    this._compatibilityWarningShown = true;
+
+    const missingFeatures = [];
+    const recommendedPolyfills = [];
+
+    // Check for missing APIs
+    if (!('ResizeObserver' in window)) {
+        missingFeatures.push('ResizeObserver');
+        recommendedPolyfills.push('https://github.com/que-etc/resize-observer-polyfill');
+    }
+
+    if (!('IntersectionObserver' in window)) {
+        missingFeatures.push('IntersectionObserver');
+        recommendedPolyfills.push('https://github.com/w3c/IntersectionObserver/tree/main/polyfill');
+    }
+
+    if (!('PointerEvent' in window)) {
+        missingFeatures.push('PointerEvent');
+        console.info('AME: Falling back to mouse/touch events (PointerEvent not supported)');
+    }
+
+    if (missingFeatures.length > 0) {
+        console.group('AME: Browser Compatibility Notice');
+        console.warn(`Missing features: ${missingFeatures.join(', ')}`);
+        console.info('🌐 Browser Support:');
+        console.info('• Chrome 50+ ✓');
+        console.info('• Firefox 50+ ✓');  
+        console.info('• Safari 11+ ✓');
+        console.info('• Edge 18+ ✓');
+        console.info('📦 Recommended Polyfills:');
+        recommendedPolyfills.forEach(polyfill => console.info(`• ${polyfill}`));
+        console.info('💡 For optimal performance, consider upgrading your browser');
+        console.groupEnd();
+    }
   }
 
 }

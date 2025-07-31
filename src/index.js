@@ -14,6 +14,8 @@ let mgr = null;
  *                                         than or equal to this value will be click-through.
  *                                         Default is 0.999 (nearly transparent pixels pass clicks through)
  * @param {boolean} [options.log=false] - Enable debug logging
+ * @param {boolean} [options.useIntersectionObserver=true] - Enable automatic performance optimization for off-screen elements
+ * @param {string} [options.intersectionRootMargin='100px'] - Root margin for IntersectionObserver
  * @returns {Object} The manager instance
  * 
  * @example

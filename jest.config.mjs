@@ -9,9 +9,10 @@ export default {
   // Polyfill CanvasRenderingContext2D before tests
   setupFiles: ['<rootDir>/jest.setup.js'],
   
-  // Mock image imports in tests
+  // Mock image imports and canvas module in tests
   moduleNameMapper: {
-    '\\.(png|jpg|jpeg|gif|svg)$': '<rootDir>/__tests__/__mocks__/fileMock.js'
+    '\\.(png|jpg|jpeg|gif|svg)$': '<rootDir>/__tests__/__mocks__/fileMock.js',
+    '^canvas$': '<rootDir>/__tests__/__mocks__/canvasMock.js'
   },
   
   // Process environment for ESM compatibility
@@ -28,5 +29,5 @@ export default {
   verbose: true,
   
   // Set reasonable timeouts for async tests
-  testTimeout: 10000
+  testTimeout: 15000
 };

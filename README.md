@@ -184,6 +184,67 @@ Adjust global transparency threshold.
 
 - **value** (number): New threshold (0–1), where lower values make more pixels click-through
 
+## Custom Events
+
+Alpha Mask Events dispatches custom events when the mouse cursor transitions between opaque and transparent regions of registered elements.
+
+### alpha-mask-over
+Fired when the cursor moves from a transparent region to an opaque region (or enters an opaque region from outside the element).
+
+### alpha-mask-out  
+Fired when the cursor moves from an opaque region to a transparent region (or leaves an opaque region by exiting the element).
+
+### Event Object Properties
+
+Both events include a `detail` object with the following properties:
+
+- **element** (HTMLElement): The element that triggered the event
+- **alpha** (number): The alpha value (0-1) at the cursor position
+- **coordinates** (object): Canvas coordinates `{ x: number, y: number }` where the event occurred
+- **threshold** (number): The threshold value used for this element
+
+### Usage Example
+
+```javascript
+import AME from 'alpha-mask-events';
+
+// Initialize and register an element
+AME.init();
+const element = document.querySelector('.my-image');
+
+// Listen for opacity transition events
+element.addEventListener('alpha-mask-over', (event) => {
+  console.log('Mouse entered opaque region');
+  console.log('Alpha value:', event.detail.alpha);
+  console.log('Coordinates:', event.detail.coordinates);
+  console.log('Threshold:', event.detail.threshold);
+
+  // Add visual feedback
+  element.classList.add('hover-opaque');
+});
+
+element.addEventListener('alpha-mask-out', (event) => {
+  console.log('Mouse left opaque region');
+  
+  // Remove visual feedback
+  element.classList.remove('hover-opaque');
+});
+```
+
+### TypeScript Support
+
+```typescript
+import AME, { AlphaMaskEvent } from 'alpha-mask-events';
+
+const element = document.querySelector('.my-image') as HTMLElement;
+
+element.addEventListener('alpha-mask-over', (event: AlphaMaskEvent) => {
+  // TypeScript knows about event.detail properties
+  const { alpha, coordinates, threshold, element } = event.detail;
+  console.log(`Alpha: ${alpha}, Coords: ${coordinates.x},${coordinates.y}`);
+});
+```
+
 ## CLI Usage
 
 Generate compact masks for opaque regions in PNG files (useful for server-side optimizations).
@@ -367,7 +428,7 @@ Polyfill required for:
    - Consider resizing images to actual displayed dimensions
 
 3. **Unregister elements when not needed**:
-   - Use `CT.unregister()` for elements being removed from DOM
+   - Use `AME.unregister()` for elements being removed from DOM
 
 4. **Use the CLI tool for static masks**:
    - For static images, pre-generate mask data

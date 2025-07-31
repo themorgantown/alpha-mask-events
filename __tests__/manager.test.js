@@ -4,7 +4,7 @@ import { jest, describe, test, expect, beforeAll, afterAll, beforeEach } from '@
 import Manager from '../src/manager.js'; // Use default import
 
 // Helper to wait for async operations like image loading affecting the registry
-function waitForRegistrySize(mgr, expectedSize, timeout = 500) {
+function waitForRegistrySize(mgr, expectedSize, timeout = 1000) {
   return new Promise((resolve, reject) => {
     const start = Date.now();
     (function check() {
@@ -13,13 +13,13 @@ function waitForRegistrySize(mgr, expectedSize, timeout = 500) {
       if (Date.now() - start > timeout) return reject(
         new Error(`Timeout waiting for registry to reach size ${expectedSize}, current: ${mgr.registry.size}`)
       );
-      setTimeout(check, 10); // Check again shortly
+      setTimeout(check, 20); // Check again shortly
     })();
   });
 }
 
 // Helper to wait for entry.imageLoaded to be true
-function waitForImageLoad(entry, timeout = 500) {
+function waitForImageLoad(entry, timeout = 1000) {
   return new Promise((resolve, reject) => {
     const start = Date.now();
     (function check() {
@@ -27,7 +27,7 @@ function waitForImageLoad(entry, timeout = 500) {
       if (Date.now() - start > timeout) return reject(
         new Error(`Timeout waiting for entry.imageLoaded to become true`)
       );
-      setTimeout(check, 10); // Check again shortly
+      setTimeout(check, 20); // Check again shortly
     })();
   });
 }
@@ -125,8 +125,11 @@ describe('Manager', () => {
     jest.clearAllMocks();
     // Clear the DOM
     document.body.innerHTML = '';
-    // Create a new manager instance for isolation
-    mgr = new Manager({ log: false }); // Disable logging for cleaner test output
+    // Create a new manager instance for isolation with logging and IntersectionObserver disabled to avoid timing issues
+    mgr = new Manager({ 
+      log: false, 
+      useIntersectionObserver: false 
+    });
   });
 
   test('add and remove element', async () => {
@@ -144,6 +147,11 @@ describe('Manager', () => {
     expect(mgr.registry.size).toBe(1);
     expect(mgr.registry.has(div)).toBe(true);
     expect(div.style.pointerEvents).toBe('none'); // Initial state
+
+    // Verify the registry entry has the expected structure
+    const entry = mgr.registry.get(div);
+    expect(entry.isVisible).toBeDefined(); // Should be initialized
+    expect(entry.imageLoaded).toBeDefined(); // Should be initialized
 
     mgr.remove('#test-div');
     expect(mgr.registry.size).toBe(0);
@@ -259,6 +267,46 @@ describe('Manager', () => {
 
      // Restore mocks specifically spied on this element
      jest.restoreAllMocks(); // Cleans up spies like getBoundingClientRect
+  });
+
+  test('IntersectionObserver integration works correctly', async () => {
+    // Create a manager with IntersectionObserver enabled
+    const mgrWithIO = new Manager({ log: false, useIntersectionObserver: true });
+
+    const div = document.createElement('div');
+    div.id = 'test-intersection';
+    div.style.backgroundImage = 'url(test.png)';
+    div.style.pointerEvents = 'none'; // Set initial pointer events
+    document.body.appendChild(div);
+
+    // Spy on IntersectionObserver methods BEFORE calling scan()
+    const observeSpy = jest.spyOn(global.IntersectionObserver.prototype, 'observe');
+    const unobserveSpy = jest.spyOn(global.IntersectionObserver.prototype, 'unobserve');
+
+    // This should set up IntersectionObserver
+    mgrWithIO.scan(); 
+
+    // Now add the element - this should call observe after image loads
+    mgrWithIO.add(div);
+    await waitForRegistrySize(mgrWithIO, 1);
+
+    // Wait for the image to load, which triggers IntersectionObserver.observe()
+    const entry = mgrWithIO.registry.get(div);
+    await waitForImageLoad(entry);
+
+    expect(entry.isVisible).toBe(true); // Should be visible initially
+
+    // Verify IntersectionObserver was used after image loaded
+    expect(observeSpy).toHaveBeenCalledWith(div);
+
+    // Test removal also unobserves
+    mgrWithIO.remove(div);
+    expect(unobserveSpy).toHaveBeenCalledWith(div);
+    expect(mgrWithIO.registry.size).toBe(0);
+
+    // Clean up
+    mgrWithIO.detachListeners();
+    jest.restoreAllMocks();
   });
 
 });

@@ -300,8 +300,80 @@
       }
     </style>
 
+    <!-- Alpha Mask Events Library Loading with Local Build Fallback -->
+    <script>
+      /**
+       * Dynamically loads the Alpha Mask Events library with fallback strategy
+       * 1. Attempts to load from local dist/ folder (latest build)
+       * 2. Falls back to CDN version if local fails
+       * 
+       * This approach ensures development uses latest local changes while
+       * providing production-ready fallback for deployed demos.
+       */
+      (function loadAlphaMaskEvents() {
+        const LOCAL_BUILD_PATH = '../dist/alpha-mask-events.umd.min.js';
+        const CDN_FALLBACK = 'https://cdn.jsdelivr.net/npm/alpha-mask-events@0.9/dist/alpha-mask-events.umd.min.js';
+        
+        /**
+         * Creates and loads a script element with error handling
+         * @param {string} src - Script source URL
+         * @param {Function} onSuccess - Success callback
+         * @param {Function} onError - Error callback
+         */
+        function loadScript(src, onSuccess, onError) {
+          const script = document.createElement('script');
+          script.src = src;
+          script.async = true;
+          
+          script.addEventListener('load', onSuccess);
+          script.addEventListener('error', onError);
+          
+          document.head.appendChild(script);
+          return script;
+        }
 
-        <script src="https://cdn.jsdelivr.net/npm/alpha-mask-events@0.9/dist/alpha-mask-events.umd.min.js"></script>
+        /**
+         * Attempts to load local build first, with CDN fallback
+         */
+        function attemptLocalLoad() {
+          console.log('🔄 Attempting to load local build...');
+          
+          loadScript(LOCAL_BUILD_PATH, 
+            function onLocalSuccess() {
+              console.log('✅ Local build loaded successfully');
+              document.dispatchEvent(new CustomEvent('alphaMaskEventsLoaded', { 
+                detail: { source: 'local' } 
+              }));
+            },
+            function onLocalError() {
+              console.warn('⚠️ Local build failed, falling back to CDN...');
+              attemptCDNLoad();
+            }
+          );
+        }
+
+        /**
+         * Loads from CDN as fallback
+         */
+        function attemptCDNLoad() {
+          loadScript(CDN_FALLBACK,
+            function onCDNSuccess() {
+              console.log('✅ CDN version loaded successfully');
+              document.dispatchEvent(new CustomEvent('alphaMaskEventsLoaded', { 
+                detail: { source: 'cdn' } 
+              }));
+            },
+            function onCDNError() {
+              console.error('❌ Failed to load Alpha Mask Events from both local and CDN sources');
+              document.dispatchEvent(new CustomEvent('alphaMaskEventsLoadError'));
+            }
+          );
+        }
+
+        // Start the loading process
+        attemptLocalLoad();
+      })();
+    </script>
   </head>
   <body>
     <div class="header">
@@ -353,6 +425,10 @@
         <div class="stat-item">
           <div class="stat-value" id="registered-elements">0</div>
           <div class="stat-label">Registered Elements</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-value" id="library-source">loading...</div>
+          <div class="stat-label">Library Source</div>
         </div>
         <div class="stat-item">
           <div class="stat-value" id="current-threshold">0.95</div>
@@ -445,7 +521,8 @@
         transparentClicks: 0,
         registeredElements: 0,
         responseTimes: [],
-        currentThreshold: 0.95
+        currentThreshold: 0.95,
+        librarySource: 'loading...'
       };
 
       // Mask visualization state
@@ -580,6 +657,7 @@
         document.getElementById('opaque-clicks').textContent = stats.opaqueClicks;
         document.getElementById('transparent-clicks').textContent = stats.transparentClicks;
         document.getElementById('registered-elements').textContent = stats.registeredElements;
+        document.getElementById('library-source').textContent = stats.librarySource;
         document.getElementById('current-threshold').textContent = stats.currentThreshold;
         
         const avgTime = stats.responseTimes.length > 0 
@@ -765,9 +843,16 @@
         });
       }
 
-      // Initialize everything when DOM is ready
-      document.addEventListener('DOMContentLoaded', () => {
+      // Initialize everything when DOM and library are ready
+      function initializeDemo() {
         addLogEntry('DOM loaded, initializing demo...', 'info');
+        
+        // Check if AlphaMaskEvents is available
+        if (typeof AlphaMaskEvents === 'undefined') {
+          addLogEntry('AlphaMaskEvents not yet loaded, waiting...', 'warning');
+          return;
+        }
+        
         initializeAME();
         
         // Wait a bit for images to load and alpha-mask-events to fully initialize
@@ -775,6 +860,40 @@
           setupEventListeners();
           addLogEntry('Demo initialization complete!', 'success');
         }, 100);
+      }
+
+      // Handle library loading events
+      document.addEventListener('alphaMaskEventsLoaded', (event) => {
+        const source = event.detail.source;
+        stats.librarySource = source === 'local' ? '🔧 Local Build' : '🌐 CDN';
+        addLogEntry(`✅ Alpha Mask Events loaded from ${source}`, 'success');
+        
+        // Initialize if DOM is ready
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', initializeDemo);
+        } else {
+          initializeDemo();
+        }
+      });
+
+      document.addEventListener('alphaMaskEventsLoadError', () => {
+        stats.librarySource = '❌ Failed';
+        addLogEntry('❌ Failed to load Alpha Mask Events library', 'error');
+        addLogEntry('Demo cannot function without the library', 'error');
+        updateStats();
+      });
+
+      // Initialize when DOM is ready (library might already be loaded)
+      document.addEventListener('DOMContentLoaded', () => {
+        // Small delay to allow script loading to attempt
+        setTimeout(() => {
+          if (typeof AlphaMaskEvents !== 'undefined') {
+            // Library already loaded
+            initializeDemo();
+          } else {
+            addLogEntry('Waiting for Alpha Mask Events library to load...', 'info');
+          }
+        }, 50);
       });
 
                         // Add some performance monitoring
@@ -783,44 +902,7 @@
       });
     </script>
   </body>
-</html>
-    </script>
-  </body>
-</html>
-    </script>
-  </body>
-</html>
-  </head>
-  <body>
-    <h1>Clickable Transparency Demo</h1>
-    <p>Click on the solid part of the image to flip it.</p>
-    <p>Offscreen Canvas for Pixel Inspection
-      The code creates a hidden (offscreen) canvas for each flip container:</p>
-
-      An offscreen canvas is used so that the image's pixel data can be inspected without modifying what the user sees.
-      The canvas’s dimensions are set on the load event of the image to match its natural (intrinsic) width and height. This ensures that pixel values (especially the alpha channel) are read correctly.
-      Event Listeners
-      Two main event listeners are added to each flip container:
-      
-      mousemove
-      
-      Calculates the mouse position relative to the actual image.
-      Uses getBoundingClientRect() to get the rendered dimensions and position.
-      Determines the corresponding pixel coordinates on the offscreen canvas by applying a scale factor (canvas natural size divided by the displayed size).
-      Draws the front image onto the canvas and uses getImageData to read the alpha channel (fourth byte) of the pixel where the mouse is located.
-      If the alpha value is greater than 0 (i.e., the pixel is not fully transparent), the cursor changes to a pointer, suggesting that click interaction is possible.
-      click
-      <p></p>
-      Similar coordinate calculations are performed to translate the click position from the visible image coordinate system to the offscreen canvas coordinate system.
-      The image is drawn again onto the canvas, the pixel data is checked, and if the alpha channel indicates opacity, the container’s CSS class flipped is toggled.<p></p>
-      It also logs the time taken for the transparency check, which helps in diagnosing performance if needed.
-      Cross-Origin Image Handling
-      <p></p>
-      The crossOrigin="anonymous" attribute is used on the img tags. This allows the image to be loaded in a way that lets the canvas access its pixel data without being tainted by cross-origin security restrictions.
-      CSS Interaction (Outside the Script)
-      <p>
-      The script toggles a CSS class flipped on a container, which presumably is used to apply CSS transitions or transforms to create the flipping effect. This separation of concerns (logic in JS, styles in CSS) is a good practice.
-      In summary, the implementation leverages an offscreen canvas along with precise calculations of scaling between the rendered image and its natural size. This allows it to accurately determine whether a user’s click occurred on an opaque (non-transparent) pixel, enabling a selective flipping effect based on image content. </p>
+ 
 
   </body>
 </html>

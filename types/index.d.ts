@@ -3,6 +3,25 @@ export interface AMEOptions {
   threshold?: number;
   /** enable debug logging */
   log?: boolean;
+  /** enable automatic performance optimization for off-screen elements */
+  useIntersectionObserver?: boolean;
+  /** root margin for IntersectionObserver */
+  intersectionRootMargin?: string;
+}
+
+export interface AMEEventDetail {
+  /** The HTML element that triggered the event */
+  element: HTMLElement;
+  /** The alpha value (0-1) at the cursor position */
+  alpha: number;
+  /** Canvas coordinates where the event occurred */
+  coordinates: { x: number; y: number };
+  /** The threshold value used for this element */
+  threshold: number;
+}
+
+export interface AlphaMaskEvent extends CustomEvent<AMEEventDetail> {
+  detail: AMEEventDetail;
 }
 
 export interface AMEManager {

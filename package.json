@@ -1,6 +1,6 @@
 {
   "name": "alpha-mask-events",
-  "version": "0.9.4",
+  "version": "0.9.5",
   "description": "Enable click‑through on transparent regions of images using alpha masks.",
   "main": "dist/index.cjs.js",
   "module": "dist/index.esm.js",
