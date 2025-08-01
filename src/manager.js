@@ -5,6 +5,11 @@
 const DEFAULT_THRESHOLD = 0.999; // Pixels with alpha > this are considered opaque
 
 /**
+ * Global image cache to avoid reloading identical images
+ */
+const MASK_CACHE = new Map();
+
+/**
  * Supported image formats with transparency capability
  */
 const SUPPORTED_FORMATS = {
@@ -211,28 +216,22 @@ export default class Manager {
     if (this.log) console.log('AME: Registering element', el, 'with src:', src, 'threshold:', threshold);
 
 
-    // Load the image
-    const img = new window.Image();
-    img.crossOrigin = 'Anonymous'; // Attempt anonymous CORS
-    img.onload = () => {
-        if (this.log) console.log('AME: Image loaded successfully for', el, src);
-        entry.img = img;
+    // Check cache before loading
+    if (MASK_CACHE.has(src)) {
+        const cachedImg = MASK_CACHE.get(src);
+        entry.img = cachedImg;
         entry.imageLoaded = true;
-        // Initial canvas draw now that image is loaded
         this._drawBackgroundToCanvas(entry);
-
-        // Setup ResizeObserver only after image is loaded and canvas is ready
+        
+        // Setup observers immediately since image is already loaded
         if ('ResizeObserver' in window) {
             const ro = new ResizeObserver(() => this._updateCanvas(entry));
             ro.observe(el);
             this._resizeObservers.set(el, ro);
-        } else {
-            if (this.log) {
-                console.warn('AME: ResizeObserver not supported. Layout changes might affect accuracy.');
-            }
+        } else if (this.log) {
+            console.warn('AME: ResizeObserver not supported. Layout changes might affect accuracy.');
         }
-
-        // Add to IntersectionObserver for performance optimization
+        
         if (this.useIntersectionObserver) {
             if (!this._intersectionObserver) {
                 this._setupIntersectionObserver();
@@ -240,11 +239,43 @@ export default class Manager {
             if (this._intersectionObserver && !this._intersectionElements.has(el)) {
                 this._intersectionObserver.observe(el);
                 this._intersectionElements.add(el);
-                entry.isVisible = true; // Assume visible until IntersectionObserver says otherwise
+                entry.isVisible = true;
             }
         }
-    };
-    img.onerror = (e) => {
+    } else {
+        // Load new image
+        const img = new window.Image();
+        img.crossOrigin = 'Anonymous';
+        img.onload = () => {
+            if (this.log) console.log('AME: Image loaded successfully for', el, src);
+            entry.img = img;
+            entry.imageLoaded = true;
+            this._drawBackgroundToCanvas(entry);
+
+            // Setup observers
+            if ('ResizeObserver' in window) {
+                const ro = new ResizeObserver(() => this._updateCanvas(entry));
+                ro.observe(el);
+                this._resizeObservers.set(el, ro);
+            } else if (this.log) {
+                console.warn('AME: ResizeObserver not supported. Layout changes might affect accuracy.');
+            }
+
+            if (this.useIntersectionObserver) {
+                if (!this._intersectionObserver) {
+                    this._setupIntersectionObserver();
+                }
+                if (this._intersectionObserver && !this._intersectionElements.has(el)) {
+                    this._intersectionObserver.observe(el);
+                    this._intersectionElements.add(el);
+                    entry.isVisible = true;
+                }
+            }
+            
+            // Add to cache for future use
+            MASK_CACHE.set(src, img);
+            };
+            img.onerror = (e) => {
         const errorDetails = {
             element: el,
             src,
@@ -288,10 +319,14 @@ export default class Manager {
         console.info('• Use same-origin images when possible');
         console.groupEnd();
         
-        // Clean up if image fails to load
-        this.remove(el);
-    };
-    img.src = src; // Start loading
+            // Clean up if image fails to load
+            this.remove(el);
+        };
+        img.src = src; // Start loading
+        
+        // Add to cache after successful load
+        MASK_CACHE.set(src, img);
+    }
   }
 
   /**

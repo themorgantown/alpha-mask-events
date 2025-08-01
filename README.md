@@ -13,7 +13,7 @@
 Ever been frustrated when:
 - You had to use CSS clip-paths or complex SVG masks to make irregularly shaped elements clickable only on their visible parts?
 - You wanted to stack elements and have clicks "fall through" the transparent regions?
-- You just want to show the 'hand' cursor on SOLID parts of images? 
+- You want greater control over pointer events and transparent images?
 
 This lightweight library solves these problems with minimal setup and supports all modern image formats with transparency.
 
@@ -290,7 +290,7 @@ npx ame-generate-masks button.png --out button-mask.json --blur 2
 **Options:**
 - **<images...>**: One or more image paths or glob patterns
 - **--out** (string, required): Path to output JSON file
-- **--threshold** (number, default: `0.1`): Opaque mask threshold (0–1)
+- **--threshold** (number, default: `0.1`): Alpha threshold (0–1). Pixels with alpha > threshold are included in the opaque mask
 - **--blur** (number, default: `1`): Box blur radius in pixels applied to alpha channel before thresholding
 
 **Output format:**
@@ -473,20 +473,73 @@ Polyfill required for:
 
 ## Performance Tips
 
-1. **Use appropriate threshold values**:
+1. **Automatic Image Caching**:
+   - The library automatically caches loaded images to avoid redundant network requests
+   - Multiple elements using the same image source share a single cached `Image` object
+   - Cache persists for the entire page session, providing instant registration for repeated images
+   - Memory efficient: images are cached by URL, not duplicated per element
+
+2. **Use appropriate threshold values**:
    - Higher values (closer to 1.0) make fewer pixels click-through
    - Lower values (closer to 0.0) make more pixels click-through
 
-2. **Optimize image sizes**:
+3. **Optimize image sizes**:
    - Large images take longer to process
    - Consider resizing images to actual displayed dimensions
 
-3. **Unregister elements when not needed**:
+4. **Unregister elements when not needed**:
    - Use `AME.unregister()` for elements being removed from DOM
 
-4. **Use the CLI tool for static masks**:
+5. **Use the CLI tool for static masks**:
    - For static images, pre-generate mask data
    - Load JSON masks instead of analyzing images at runtime
+  ## How to Create a Mask Using the CLI
+
+  To generate a mask for an image using the CLI tool, use the `npx ame-generate-masks` command. This will analyze the transparency of your image and output a JSON mask file describing the opaque regions.
+
+  ### Example: Generate a Mask for a PNG Image
+
+  ```bash
+  npx ame-generate-masks logo.png --out logo-mask.json
+  ```
+
+  This command processes `logo.png` and writes the mask data to `logo-mask.json`.
+
+  ### Example: Custom Threshold and Blur
+
+  ```bash
+  npx ame-generate-masks hero.webp --out hero-mask.json --threshold 0.2 --blur 2
+  ```
+
+  - `--threshold 0.2`: Pixels with alpha > 0.2 are considered opaque (included in mask).
+  - `--blur 2`: Applies a box blur of radius 2 pixels to the alpha channel before thresholding.
+
+  ### Example: Multiple Images
+
+  ```bash
+  npx ame-generate-masks sprites/*.png --out masks.json
+  ```
+
+  Processes all PNG files in the `sprites` directory and outputs a combined mask file.
+
+  ### Output Format
+
+  The output JSON contains the dimensions and rectangles for each image's opaque regions:
+
+  ```json
+  {
+    "logo.png": {
+      "width": 256,
+      "height": 256,
+      "rects": [
+        { "x": 10, "y": 10, "w": 50, "h": 1 },
+        { "x": 8, "y": 11, "w": 54, "h": 1 }
+      ]
+    }
+  }
+  ```
+
+  **Tip:** Use the generated mask file for server-side hit-testing or to optimize client-side performance by loading precomputed mask data.
 
 ## Development
 

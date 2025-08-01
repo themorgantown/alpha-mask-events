@@ -1,6 +1,6 @@
 {
   "name": "alpha-mask-events",
-  "version": "1.0",
+  "version": "1.0.1",
   "description": "Enable click‑through on transparent regions of images (PNG, WebP, AVIF, GIF, SVG) using alpha masks.",
   "main": "dist/index.cjs.js",
   "module": "dist/index.esm.js",

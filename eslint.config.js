@@ -15,7 +15,13 @@ export default [
         getComputedStyle: 'readonly',
         ResizeObserver: 'readonly',
         requestAnimationFrame: 'readonly',
-        MutationObserver: 'readonly'
+        MutationObserver: 'readonly',
+        // DOM API globals
+        HTMLElement: 'readonly',
+        CustomEvent: 'readonly',
+        Node: 'readonly',
+        IntersectionObserver: 'readonly',
+        Image: 'readonly'
       }
     },
     rules: {
