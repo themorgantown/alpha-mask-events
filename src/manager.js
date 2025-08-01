@@ -203,7 +203,9 @@ export default class Manager {
         imageLoaded: false,
         currentSrc: src,
         isVisible: true, // Assume visible initially (will be updated by IntersectionObserver if enabled)
-        _lastOpaqueState: null // Track opaque/transparent state for custom events
+        _lastOpaqueState: null, // Track opaque/transparent state for custom events
+        _transformCache: null, // Cache for transform matrix calculations (performance optimization)
+        _lastTransform: computedStyle.transform // Track transform changes for cache invalidation
     };
     this.registry.set(el, entry);
     if (this.log) console.log('AME: Registering element', el, 'with src:', src, 'threshold:', threshold);
@@ -375,13 +377,14 @@ export default class Manager {
     // Use pointer events if available, fallback to mouse/touch
     if (window.PointerEvent) {
       document.addEventListener('pointermove', this._handler, { passive: true });
-      // We might need pointerdown too if interaction changes state immediately
-      // document.addEventListener('pointerdown', this._handler, { passive: true });
+      document.addEventListener('pointerdown', this._handler, { passive: true }); // Handle before clicks/taps
+      document.addEventListener('pointerover', this._handler, { passive: true }); // Handle hover/enter
     } else {
       document.addEventListener('mousemove', this._handler, { passive: true });
       document.addEventListener('touchmove', this._handler, { passive: true });
-      // document.addEventListener('mousedown', this._handler, { passive: true });
-      // document.addEventListener('touchstart', this._handler, { passive: true });
+      document.addEventListener('mousedown', this._handler, { passive: true }); // Handle before clicks
+      document.addEventListener('touchstart', this._handler, { passive: true }); // Handle before taps
+      document.addEventListener('mouseover', this._handler, { passive: true }); // Handle hover
     }
     this._listenersAttached = true;
     if (this.log) console.log('AME: Attached global listeners');
@@ -395,12 +398,14 @@ export default class Manager {
 
     if (window.PointerEvent) {
       document.removeEventListener('pointermove', this._handler);
-      // document.removeEventListener('pointerdown', this._handler);
+      document.removeEventListener('pointerdown', this._handler);
+      document.removeEventListener('pointerover', this._handler);
     } else {
       document.removeEventListener('mousemove', this._handler);
       document.removeEventListener('touchmove', this._handler);
-      // document.removeEventListener('mousedown', this._handler);
-      // document.removeEventListener('touchstart', this._handler);
+      document.removeEventListener('mousedown', this._handler);
+      document.removeEventListener('touchstart', this._handler);
+      document.removeEventListener('mouseover', this._handler);
     }
 
     // Clean up MutationObserver
@@ -495,10 +500,11 @@ export default class Manager {
         if (clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom) {
             // Pointer is inside the element bounds, perform alpha check
 
-            // Map screen coordinates to canvas coordinates
-            // This assumes the canvas content accurately reflects the rendered background
-            const canvasX = Math.floor((clientX - rect.left) * (canvas.width / rect.width));
-            const canvasY = Math.floor((clientY - rect.top) * (canvas.height / rect.height));
+            // Map screen coordinates to canvas coordinates with CSS transform support
+            // This handles rotation, scaling, skewing, and other CSS transforms
+            const { canvasX, canvasY } = this._mapPointerToCanvasCoordinates(
+                clientX, clientY, el, rect, canvas, entry
+            );
 
             let alpha = 0; // Default to transparent if sampling fails
             // Ensure coordinates are within canvas bounds before sampling
@@ -526,7 +532,7 @@ export default class Manager {
                     
                     // Fallback Strategy 1: Bounding box approximation
                     // Use element's bounding rectangle to approximate click behavior
-                    alpha = this._approximateAlphaFromBounds(el, clientX, clientY, rect, entry);
+                    alpha = this._approximateAlphaFromBounds(el, clientX, clientY, rect);
                 }
             } else {
                  if (this.log) console.log('AME: Calculated coords outside canvas bounds', { canvasX, canvasY, canvasW: canvas.width, canvasH: canvas.height });
@@ -678,6 +684,14 @@ export default class Manager {
                     // Re-process: remove old, add new (simplest way to handle src change)
                     this.remove(targetElement);
                     this.add(targetElement); // Re-add will pick up the new source
+                } else if (wasRegistered && registeredEntry && mutation.attributeName === 'style') {
+                    // Style changed - invalidate transform cache for transform-related changes
+                    const currentTransform = getComputedStyle(targetElement).transform;
+                    if (registeredEntry._transformCache && registeredEntry._lastTransform !== currentTransform) {
+                        if (this.log > 1) console.log('AME: Transform changed, invalidating cache', targetElement);
+                        registeredEntry._transformCache = null; // Clear transform cache
+                        registeredEntry._lastTransform = currentTransform;
+                    }
                 }
             }
         }
@@ -946,11 +960,10 @@ export default class Manager {
    * @param {number} clientX - Mouse X coordinate
    * @param {number} clientY - Mouse Y coordinate  
    * @param {DOMRect} rect - Element bounding rectangle
-   * @param {Object} entry - Registry entry for the element
    * @returns {number} - Approximated alpha value (0-1)
    * @private
    */
-  _approximateAlphaFromBounds(el, clientX, clientY, rect, entry) {
+  _approximateAlphaFromBounds(el, clientX, clientY, rect) {
       // Strategy: Use conservative heuristics for common image patterns
       
       // Calculate relative position within element (0-1)
@@ -973,6 +986,206 @@ export default class Manager {
           const edgeDistance = (distanceFromCenter - centerOpacityRadius) / (0.707 - centerOpacityRadius); // 0.707 = corner distance
           return Math.max(0, 1 - edgeDistance * 1.5); // Gradual falloff
       }
+  }
+
+  /**
+   * Maps pointer coordinates to canvas coordinates, accounting for CSS transforms.
+   * Handles rotation, scaling, skewing, translation, and complex transform matrices.
+   * 
+   * @param {number} clientX - Pointer X coordinate in viewport space
+   * @param {number} clientY - Pointer Y coordinate in viewport space
+   * @param {HTMLElement} el - The element being tested
+   * @param {DOMRect} rect - Element bounding rectangle
+   * @param {HTMLCanvasElement} canvas - Internal canvas for the element
+   * @param {Object} entry - Registry entry for caching/optimization
+   * @returns {Object} - { canvasX, canvasY } coordinates in canvas space
+   * @private
+   */
+  _mapPointerToCanvasCoordinates(clientX, clientY, el, rect, canvas, entry) {
+    // Calculate relative coordinates within element bounds (basic case)
+    const relativeX = clientX - rect.left;
+    const relativeY = clientY - rect.top;
+    
+    // Get current computed transform
+    const computedStyle = getComputedStyle(el);
+    const transform = computedStyle.transform;
+    
+    // Check if we need to handle transforms
+    if (!transform || transform === 'none') {
+      // No transforms - use simple coordinate mapping
+      return {
+        canvasX: Math.floor(relativeX * (canvas.width / rect.width)),
+        canvasY: Math.floor(relativeY * (canvas.height / rect.height))
+      };
+    }
+    
+    // Cache transform matrix calculations for performance
+    const transformCacheKey = `${transform}_${rect.width}_${rect.height}`;
+    if (entry._transformCache?.key === transformCacheKey) {
+      // Use cached inverse transform
+      const { inverseMatrix } = entry._transformCache;
+      const transformedCoords = this._applyInverseTransform(
+        relativeX - rect.width / 2,  // Center-relative coordinates
+        relativeY - rect.height / 2,
+        inverseMatrix
+      );
+      
+      return {
+        canvasX: Math.floor((transformedCoords.x + rect.width / 2) * (canvas.width / rect.width)),
+        canvasY: Math.floor((transformedCoords.y + rect.height / 2) * (canvas.height / rect.height))
+      };
+    }
+    
+    // Parse and invert the transform matrix
+    try {
+      const matrix = this._parseTransformMatrix(transform);
+      const inverseMatrix = this._invertMatrix(matrix);
+      
+      // Cache the result for performance
+      entry._transformCache = {
+        key: transformCacheKey,
+        matrix,
+        inverseMatrix
+      };
+      
+      // Apply inverse transform to get coordinates in element's local space
+      const transformedCoords = this._applyInverseTransform(
+        relativeX - rect.width / 2,  // Center-relative coordinates
+        relativeY - rect.height / 2,
+        inverseMatrix
+      );
+      
+      // Convert back to canvas coordinates
+      return {
+        canvasX: Math.floor((transformedCoords.x + rect.width / 2) * (canvas.width / rect.width)),
+        canvasY: Math.floor((transformedCoords.y + rect.height / 2) * (canvas.height / rect.height))
+      };
+      
+    } catch (error) {
+      // Transform parsing failed - fall back to simple mapping
+      if (this.log) {
+        console.warn('AME: Transform parsing failed, using simple coordinate mapping', {
+          element: el,
+          transform,
+          error: error.message
+        });
+      }
+      
+      return {
+        canvasX: Math.floor(relativeX * (canvas.width / rect.width)),
+        canvasY: Math.floor(relativeY * (canvas.height / rect.height))
+      };
+    }
+  }
+
+  /**
+   * Parses a CSS transform matrix string into a numeric matrix array.
+   * Supports both matrix() and matrix3d() formats.
+   * 
+   * @param {string} transformString - CSS transform value (e.g., "matrix(1, 0, 0, 1, 0, 0)")
+   * @returns {Array<number>} - 6-element array for 2D matrix [a, b, c, d, e, f]
+   * @private
+   */
+  _parseTransformMatrix(transformString) {
+    // Handle matrix3d - extract 2D components
+    if (transformString.includes('matrix3d')) {
+      const match = transformString.match(/matrix3d\(([-\d.\s,]+)\)/);
+      if (match) {
+        const values = match[1].split(',').map(v => parseFloat(v.trim()));
+        // Extract 2D transformation from 3D matrix (take relevant 2D components)
+        return [values[0], values[1], values[4], values[5], values[12], values[13]];
+      }
+    }
+    
+    // Handle matrix
+    if (transformString.includes('matrix')) {
+      const match = transformString.match(/matrix\(([-\d.\s,]+)\)/);
+      if (match) {
+        const values = match[1].split(',').map(v => parseFloat(v.trim()));
+        return values; // [a, b, c, d, e, f]
+      }
+    }
+    
+    // Handle individual transform functions (rotate, scale, etc.)
+    // This is more complex but covers common cases
+    if (transformString.includes('rotate') || transformString.includes('scale') || 
+        transformString.includes('skew') || transformString.includes('translate')) {
+      
+      // Create a temporary element to let the browser compute the matrix
+      const tempEl = document.createElement('div');
+      tempEl.style.transform = transformString;
+      tempEl.style.position = 'absolute';
+      tempEl.style.visibility = 'hidden';
+      document.body.appendChild(tempEl);
+      
+      try {
+        const computedTransform = getComputedStyle(tempEl).transform;
+        document.body.removeChild(tempEl);
+        
+        if (computedTransform && computedTransform !== 'none') {
+          return this._parseTransformMatrix(computedTransform);
+        }
+      } catch (error) {
+        document.body.removeChild(tempEl);
+        throw error;
+      }
+    }
+    
+    // Fallback - identity matrix
+    return [1, 0, 0, 1, 0, 0];
+  }
+
+  /**
+   * Calculates the inverse of a 2D transformation matrix.
+   * Uses the mathematical formula for 2D matrix inversion.
+   * 
+   * @param {Array<number>} matrix - 6-element matrix [a, b, c, d, e, f]
+   * @returns {Array<number>} - Inverted 6-element matrix
+   * @private
+   */
+  _invertMatrix(matrix) {
+    const [a, b, c, d, e, f] = matrix;
+    
+    // Calculate determinant
+    const det = a * d - b * c;
+    
+    // Check for singular matrix (non-invertible)
+    if (Math.abs(det) < 1e-10) {
+      if (this.log) {
+        console.warn('AME: Transform matrix is singular (non-invertible), using identity');
+      }
+      return [1, 0, 0, 1, 0, 0];
+    }
+    
+    // Calculate inverse matrix elements
+    const invDet = 1 / det;
+    
+    return [
+      d * invDet,           // a'
+      -b * invDet,          // b'  
+      -c * invDet,          // c'
+      a * invDet,           // d'
+      (c * f - d * e) * invDet,  // e'
+      (b * e - a * f) * invDet   // f'
+    ];
+  }
+
+  /**
+   * Applies an inverse transform matrix to a point.
+   * 
+   * @param {number} x - X coordinate
+   * @param {number} y - Y coordinate  
+   * @param {Array<number>} inverseMatrix - 6-element inverse transform matrix
+   * @returns {Object} - Transformed coordinates { x, y }
+   * @private
+   */
+  _applyInverseTransform(x, y, inverseMatrix) {
+    const [a, b, c, d, e, f] = inverseMatrix;
+    
+    return {
+      x: a * x + c * y + e,
+      y: b * x + d * y + f
+    };
   }
 
   /**
