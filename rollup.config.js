@@ -2,6 +2,23 @@ import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import terser from '@rollup/plugin-terser';
 
+// Enhanced terser options for production optimization
+const terserOptions = {
+  compress: {
+    drop_console: true,        // Remove console.log statements
+    drop_debugger: true,       // Remove debugger statements
+    pure_funcs: ['console.log', 'console.warn', 'console.info', 'console.error'], // Mark as side-effect free
+    unsafe: true,              // Enable unsafe optimizations
+    unsafe_math: true,         // Optimize math operations
+    passes: 3                  // Multiple optimization passes
+  },
+  mangle: {
+    properties: {
+      regex: /^_/               // Mangle private properties starting with _
+    }
+  }
+};
+
 export default [
   // ES module build
   {
@@ -23,7 +40,7 @@ export default [
       sourcemap: true,
       exports: 'named'
     },
-    plugins: [ resolve(), commonjs(), terser() ] // Minified version
+    plugins: [ resolve(), commonjs(), terser(terserOptions) ] // Minified version with optimization
   },
   // CommonJS build
   {
@@ -45,7 +62,7 @@ export default [
       sourcemap: true,
       exports: 'named'
     },
-    plugins: [ resolve(), commonjs(), terser() ] // Minified version
+    plugins: [ resolve(), commonjs(), terser(terserOptions) ] // Minified version with optimization
   },
   // UMD build (for CDN, browsers)
   {
@@ -69,6 +86,6 @@ export default [
       exports: 'named',
       sourcemap: true
     },
-    plugins: [ resolve(), commonjs(), terser() ] // Minified version
+    plugins: [ resolve(), commonjs(), terser(terserOptions) ] // Minified version with optimization
   }
 ];

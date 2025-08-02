@@ -140,9 +140,6 @@ export default class Manager {
       : elOrSelector;
 
     if (!el || !(el instanceof HTMLElement) || this.registry.has(el)) {
-        if (this.log && el && this.registry.has(el)) console.log('AME: Element already registered', el);
-        else if (this.log && !el) console.warn('AME: Element not found for selector', elOrSelector);
-        else if (this.log) console.warn('AME: Invalid element provided', el);
         return;
     }
 
@@ -157,40 +154,45 @@ export default class Manager {
       const bg = computedStyle.backgroundImage;
       const match = bg.match(/url\((['"]?)(.*?)\1\)/); // More robust regex
       if (!match || !match[2]) {
-          if (this.log) console.warn('AME: No background-image URL found for element', el);
           return;
       }
       src = match[2];
     }
 
     if (!src) {
-        if (this.log) console.warn('AME: Could not determine image source for element', el);
         return;
     }
 
     // Detect and validate image format
     const formatDetection = detectImageFormat(src);
-    if (this.log && formatDetection.warning) {
-        console.warn(`AME: Format warning for ${src}: ${formatDetection.warning}`);
+
+    // Log format detection information if logging is enabled
+    if (this.log && formatDetection.format) {
+      console.log(`Detected format: ${formatDetection.format.toUpperCase()}`);
+      if (formatDetection.info) {
+        console.log(`Browser: ${formatDetection.info.browserSupport}`);
+      }
     }
-    
-    // Enhanced logging for format detection
-    if (this.log) {
-        console.log(`AME: Detected format: ${formatDetection.format?.toUpperCase() || 'unknown'} for ${src}`);
-        if (formatDetection.info) {
-            const alphaSupportText = formatDetection.info.hasAlpha === true ? '✅ Full alpha' :
-                                   formatDetection.info.hasAlpha === 'limited' ? '⚠️ Limited alpha' :
-                                   '❌ No alpha';
-            console.log(`AME: Format capabilities - ${alphaSupportText}, Browser: ${formatDetection.info.browserSupport}`);
-        }
+
+    // Log format warnings
+    if (formatDetection.warning) {
+      if (formatDetection.info === null) {
+        // Unknown format - use console.warn
+        console.warn(`AME: ${formatDetection.warning}`);
+      } else if (formatDetection.info.hasAlpha === false) {
+        // Format without transparency - use console.warn
+        console.warn(`AME: ${formatDetection.format.toUpperCase()} format does not support transparency`);
+      } else {
+        // Other warnings (browser support, limited alpha) - use console.info for less critical issues
+        console.info(`AME: ${formatDetection.format.toUpperCase()}: ${formatDetection.warning.split(';').map(w => w.trim()).join('. ')}`);
+      }
     }
 
     // Create canvas and context immediately
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) {
-        console.error('AME: Failed to get 2D context for canvas. Alpha masking disabled for element.', el);
-        return;
+        return; // Silently fail if 2D context not available
     }
 
     // Store original pointer-events and set to 'none' initially
@@ -213,7 +215,6 @@ export default class Manager {
         _lastTransform: computedStyle.transform // Track transform changes for cache invalidation
     };
     this.registry.set(el, entry);
-    if (this.log) console.log('AME: Registering element', el, 'with src:', src, 'threshold:', threshold);
 
 
     // Check cache before loading
@@ -224,13 +225,9 @@ export default class Manager {
         this._drawBackgroundToCanvas(entry);
         
         // Setup observers immediately since image is already loaded
-        if ('ResizeObserver' in window) {
-            const ro = new ResizeObserver(() => this._updateCanvas(entry));
-            ro.observe(el);
-            this._resizeObservers.set(el, ro);
-        } else if (this.log) {
-            console.warn('AME: ResizeObserver not supported. Layout changes might affect accuracy.');
-        }
+        const ro = new ResizeObserver(() => this._updateCanvas(entry));
+        ro.observe(el);
+        this._resizeObservers.set(el, ro);
         
         if (this.useIntersectionObserver) {
             if (!this._intersectionObserver) {
@@ -247,19 +244,14 @@ export default class Manager {
         const img = new window.Image();
         img.crossOrigin = 'Anonymous';
         img.onload = () => {
-            if (this.log) console.log('AME: Image loaded successfully for', el, src);
             entry.img = img;
             entry.imageLoaded = true;
             this._drawBackgroundToCanvas(entry);
 
             // Setup observers
-            if ('ResizeObserver' in window) {
-                const ro = new ResizeObserver(() => this._updateCanvas(entry));
-                ro.observe(el);
-                this._resizeObservers.set(el, ro);
-            } else if (this.log) {
-                console.warn('AME: ResizeObserver not supported. Layout changes might affect accuracy.');
-            }
+            const ro = new ResizeObserver(() => this._updateCanvas(entry));
+            ro.observe(el);
+            this._resizeObservers.set(el, ro);
 
             if (this.useIntersectionObserver) {
                 if (!this._intersectionObserver) {
@@ -276,51 +268,21 @@ export default class Manager {
             MASK_CACHE.set(src, img);
             };
             img.onerror = (e) => {
-        const errorDetails = {
-            element: el,
-            src,
-            error: e.type || 'unknown',
-            format: formatDetection.format,
-            timestamp: new Date().toISOString()
-        };
-        
-        console.error('AME: Image loading failed - implementing recovery strategies', errorDetails);
-        console.group('AME: Image Loading Recovery Guide');
-        console.info('🔧 Troubleshooting Steps:');
-        console.info('1. Check if the image URL is accessible:', src);
-        console.info('2. Verify CORS headers if cross-origin:', 
-            src.startsWith('http') && !src.startsWith(window.location.origin) ? 
-            '⚠️  Cross-origin detected' : '✓ Same-origin');
-        console.info('3. Image format compatibility:');
-        if (formatDetection.format && formatDetection.info) {
-            console.info(`   • Format: ${formatDetection.format.toUpperCase()}`);
-            console.info(`   • Browser support: ${formatDetection.info.browserSupport}`);
-            console.info(`   • Alpha support: ${formatDetection.info.hasAlpha === true ? 'Full' : 
-                          formatDetection.info.hasAlpha === 'limited' ? 'Limited' : 'None'}`);
-            
-            // Format-specific advice
-            if (formatDetection.format === 'webp') {
-                console.info('   💡 WebP: Ensure browser supports WebP (Chrome 23+, Firefox 65+, Safari 14+)');
-            } else if (formatDetection.format === 'avif') {
-                console.info('   💡 AVIF: Requires very recent browser (Chrome 85+, Firefox 93+, Safari 16.4+)');
-            } else if (!formatDetection.info.hasAlpha) {
-                console.info('   ⚠️  This format doesn\'t support transparency');
-            }
+        // Provide format-specific error messages and advice
+        const format = formatDetection.format;
+        if (format === 'webp') {
+          console.info('WebP: Ensure browser supports WebP');
+        } else if (format === 'avif') {
+          console.info('AVIF: Requires very recent browser');
+        } else if (formatDetection.info && formatDetection.info.browserSupport === 'modern') {
+          console.info(`${format.toUpperCase()}: Requires modern browser support`);
+        } else if (formatDetection.info && formatDetection.info.browserSupport === 'latest') {
+          console.info(`${format.toUpperCase()}: Requires very recent browser support`);
         } else {
-            console.info('   ⚠️  Unknown or unsupported format detected');
-            console.info('   📋 Fully supported: PNG, WebP, AVIF, GIF');
-            console.info('   📋 Partially supported: SVG, JPEG (no transparency), BMP, TIFF');
+          console.info(`Image failed to load: ${src}`);
         }
-        console.info('4. Check network connectivity and server availability');
-        console.info('💡 Alternative Solutions:');
-        console.info('• Use the CLI tool to pre-generate masks: npx ame-generate-masks');
-        console.info('• Implement server-side image processing');
-        console.info('• Use PNG format for maximum compatibility');
-        console.info('• Use same-origin images when possible');
-        console.groupEnd();
         
-            // Clean up if image fails to load
-            this.remove(el);
+        this.remove(el);
         };
         img.src = src; // Start loading
         
@@ -340,8 +302,6 @@ export default class Manager {
       : elOrSelector;
 
     if (!el || !this.registry.has(el)) {
-        if (this.log && !el) console.warn('AME: Element not found for removal', elOrSelector);
-        else if (this.log) console.log('AME: Element not registered, cannot remove', el);
         return;
     }
 
@@ -365,7 +325,6 @@ export default class Manager {
 
     // Remove from registry
     this.registry.delete(el);
-    if (this.log) console.log('AME: Unregistered element', el);
 
     // If no elements left, consider detaching global listeners (optional optimization)
     // if (this.registry.size === 0) {
@@ -388,16 +347,12 @@ export default class Manager {
               : elOrSelector;
           if (el && this.registry.has(el)) {
               this.registry.get(el).threshold = threshold;
-              if (this.log) console.log('AME: Updated threshold for specific element', el, threshold);
-          } else if (this.log) {
-              console.warn('AME: Element not found or not registered for setThreshold', elOrSelector);
           }
       } else {
           this.threshold = threshold; // Update global default
           this.registry.forEach(entry => {
               entry.threshold = threshold; // Update all existing entries
           });
-          if (this.log) console.log('AME: Updated global threshold', threshold);
       }
   }
 
@@ -409,20 +364,12 @@ export default class Manager {
     // Check if listeners are already attached (simple check)
     if (this._listenersAttached) return;
 
-    // Use pointer events if available, fallback to mouse/touch
-    if (window.PointerEvent) {
-      document.addEventListener('pointermove', this._handler, { passive: true });
-      document.addEventListener('pointerdown', this._handler, { passive: true }); // Handle before clicks/taps
-      document.addEventListener('pointerover', this._handler, { passive: true }); // Handle hover/enter
-    } else {
-      document.addEventListener('mousemove', this._handler, { passive: true });
-      document.addEventListener('touchmove', this._handler, { passive: true });
-      document.addEventListener('mousedown', this._handler, { passive: true }); // Handle before clicks
-      document.addEventListener('touchstart', this._handler, { passive: true }); // Handle before taps
-      document.addEventListener('mouseover', this._handler, { passive: true }); // Handle hover
-    }
+    // Use modern pointer events (assumes modern browser support)
+    document.addEventListener('pointermove', this._handler, { passive: true });
+    document.addEventListener('pointerdown', this._handler, { passive: true });
+    document.addEventListener('pointerover', this._handler, { passive: true });
+    
     this._listenersAttached = true;
-    if (this.log) console.log('AME: Attached global listeners');
   }
 
   /**
@@ -431,17 +378,10 @@ export default class Manager {
   detachListeners() {
     if (!this._listenersAttached) return;
 
-    if (window.PointerEvent) {
-      document.removeEventListener('pointermove', this._handler);
-      document.removeEventListener('pointerdown', this._handler);
-      document.removeEventListener('pointerover', this._handler);
-    } else {
-      document.removeEventListener('mousemove', this._handler);
-      document.removeEventListener('touchmove', this._handler);
-      document.removeEventListener('mousedown', this._handler);
-      document.removeEventListener('touchstart', this._handler);
-      document.removeEventListener('mouseover', this._handler);
-    }
+    // Remove modern pointer events
+    document.removeEventListener('pointermove', this._handler);
+    document.removeEventListener('pointerdown', this._handler);
+    document.removeEventListener('pointerover', this._handler);
 
     // Clean up MutationObserver
     if (this._mutationObserver) {
@@ -465,7 +405,6 @@ export default class Manager {
     this._resizeObservers = new WeakMap(); // Re-initialize
 
     this._listenersAttached = false;
-    if (this.log) console.log('AME: Detached global listeners and cleaned up observers/registry');
   }
 
   /**
@@ -497,17 +436,11 @@ export default class Manager {
    * @private
    */
   _hitTest(e) {
-    let clientX, clientY;
-
-    // Extract coordinates consistently
-    if (e.touches && e.touches.length > 0) {
-      clientX = e.touches[0].clientX;
-      clientY = e.touches[0].clientY;
-    } else if (typeof e.clientX !== 'undefined' && typeof e.clientY !== 'undefined') {
-      clientX = e.clientX;
-      clientY = e.clientY;
-    } else {
-      // Event type doesn't have coordinates we can use
+    // Extract coordinates from modern pointer events
+    const clientX = e.clientX;
+    const clientY = e.clientY;
+    
+    if (typeof clientX === 'undefined' || typeof clientY === 'undefined') {
       return;
     }
 
@@ -549,28 +482,10 @@ export default class Manager {
                     const pixelData = ctx.getImageData(canvasX, canvasY, 1, 1).data;
                     alpha = pixelData[3] / 255; // Alpha is the 4th component (0-255)
                 } catch (err) {
-                    // Enhanced CORS error recovery with fallback strategies
-                    if (this.log && !entry._loggedImageDataError) {
-                        console.warn('AME: getImageData failed - implementing fallback strategy.', {
-                            element: el,
-                            error: err.message,
-                            src: entry.currentSrc,
-                            fallback: 'Using bounding box approximation'
-                        });
-                        console.info('AME: CORS Recovery Tips:\n' +
-                            '• Ensure images have crossOrigin="anonymous" attribute\n' +
-                            '• Verify server sends Access-Control-Allow-Origin headers\n' +
-                            '• Consider using the CLI tool for pre-generated masks\n' +
-                            '• Use same-origin images when possible');
-                        entry._loggedImageDataError = true;
-                    }
-                    
-                    // Fallback Strategy 1: Bounding box approximation
-                    // Use element's bounding rectangle to approximate click behavior
+                    // CORS error recovery - use fallback strategy
                     alpha = this._approximateAlphaFromBounds(el, clientX, clientY, rect);
                 }
             } else {
-                 if (this.log) console.log('AME: Calculated coords outside canvas bounds', { canvasX, canvasY, canvasW: canvas.width, canvasH: canvas.height });
                  // Treat as transparent if outside calculated canvas bounds
                  alpha = 0;
             }
@@ -605,14 +520,12 @@ export default class Manager {
             // Update style only if it changed to avoid unnecessary style recalcs
             if (el.style.pointerEvents !== newPointerEvents) {
                 el.style.pointerEvents = newPointerEvents;
-                if (this.log > 1) console.log(`AME: Set pointerEvents=${newPointerEvents} (alpha=${alpha.toFixed(3)}) on`, el);
             }
 
         } else {
             // Pointer is outside the element bounds, restore original style if needed
             if (el.style.pointerEvents !== originalPointerEvents) {
                 el.style.pointerEvents = originalPointerEvents;
-                 if (this.log > 1) console.log(`AME: Pointer left bounds, restored pointerEvents=${originalPointerEvents} on`, el);
             }
             
             // Dispatch alpha-mask-out event if we were previously in an opaque state
@@ -645,14 +558,7 @@ export default class Manager {
         cancelable: false  // Not cancelable
       });
       element.dispatchEvent(event);
-      
-      if (this.log > 1) {
-        console.log(`AME: Dispatched ${eventType} on`, element, 'with detail:', detail);
-      }
     } catch (error) {
-      if (this.log) {
-        console.warn(`AME: Failed to dispatch ${eventType} event:`, error);
-      }
     }
   }
 
@@ -715,7 +621,6 @@ export default class Manager {
                     this.remove(targetElement);
                 } else if (wasRegistered && currentSrc && registeredEntry && currentSrc !== registeredEntry.currentSrc) {
                     // Source changed (e.g., img src or background-image)
-                    if (this.log) console.log('AME: Image source changed, re-processing element', targetElement);
                     // Re-process: remove old, add new (simplest way to handle src change)
                     this.remove(targetElement);
                     this.add(targetElement); // Re-add will pick up the new source
@@ -723,7 +628,6 @@ export default class Manager {
                     // Style changed - invalidate transform cache for transform-related changes
                     const currentTransform = getComputedStyle(targetElement).transform;
                     if (registeredEntry._transformCache && registeredEntry._lastTransform !== currentTransform) {
-                        if (this.log > 1) console.log('AME: Transform changed, invalidating cache', targetElement);
                         registeredEntry._transformCache = null; // Clear transform cache
                         registeredEntry._lastTransform = currentTransform;
                     }
@@ -740,7 +644,6 @@ export default class Manager {
         attributes: true,       // Observe attribute changes
         attributeFilter: ['class', 'src', 'style'] // Focus on relevant attributes (style for background-image)
     });
-     if (this.log) console.log('AME: MutationObserver attached');
   }
 
   /**
@@ -749,7 +652,7 @@ export default class Manager {
    * @private
    */
   _setupIntersectionObserver() {
-    if (!this.useIntersectionObserver || !('IntersectionObserver' in window) || this._intersectionObserver) {
+    if (!this.useIntersectionObserver || this._intersectionObserver) {
       return;
     }
 
@@ -763,12 +666,7 @@ export default class Manager {
         const isVisible = entry.isIntersecting;
         registryEntry.isVisible = isVisible;
         
-        if (this.log > 1) {
-          console.log(`AME: Element ${isVisible ? 'entered' : 'left'} viewport`, el);
-        }
-        
         // Optionally disable pointer event processing for invisible elements
-        // This can significantly improve performance on pages with many images
         if (!isVisible) {
           // Temporarily restore original pointer events when off-screen
           el.style.pointerEvents = registryEntry.originalPointerEvents;
@@ -778,8 +676,6 @@ export default class Manager {
       rootMargin: this.intersectionRootMargin,
       threshold: [0, 0.1] // Trigger when element starts entering/leaving viewport
     });
-
-    if (this.log) console.log('AME: IntersectionObserver setup complete');
   }
 
   /**
@@ -791,7 +687,6 @@ export default class Manager {
    */
   _updateCanvas(entry) {
       if (!entry || !entry.imageLoaded || !entry.el || !entry.canvas) {
-          if (this.log) console.warn('AME: _updateCanvas called with invalid or incomplete entry', entry);
           return;
       }
 
@@ -809,7 +704,6 @@ export default class Manager {
       }
 
       if (newWidth <= 0 || newHeight <= 0) {
-          if (this.log) console.log('AME: Element resized to zero or negative dimensions, skipping canvas update', el);
           // Optionally clear the canvas or handle as needed
           canvas.width = 1; // Set to minimal size
           canvas.height = 1;
@@ -839,7 +733,6 @@ export default class Manager {
       const { el, canvas, ctx, img } = entry;
 
       if (!img || !ctx || !canvas || canvas.width <= 0 || canvas.height <= 0) {
-          if (this.log) console.warn('AME: Cannot draw background, missing image, context, or canvas dimensions are invalid', entry);
           return; // Cannot draw if image isn't loaded or canvas is invalid
       }
 
@@ -849,7 +742,6 @@ export default class Manager {
       const imgHeight = img.naturalHeight;
 
       if (imgWidth <= 0 || imgHeight <= 0) {
-           if (this.log) console.warn('AME: Image has zero dimensions, cannot draw.', img);
            return;
       }
 
@@ -923,11 +815,9 @@ export default class Manager {
       try {
           // Use the 9-argument drawImage to draw the whole source image into the calculated dest rect
           ctx.drawImage(img, 0, 0, imgWidth, imgHeight, dx, dy, dw, dh);
-          if (this.log > 1) console.log(`AME: Drew image to canvas for ${el.id || el.tagName}`, { dx, dy, dw, dh, canvasW: canvasWidth, canvasH: canvasHeight });
           entry._loggedImageDataError = false; // Reset error log flag on successful draw
       } catch (e) {
           // This might happen with certain image types or extreme scaling
-          console.error('AME: Error during ctx.drawImage:', e, { el, img: img.src, dx, dy, dw, dh });
       }
   }
 
@@ -1098,14 +988,6 @@ export default class Manager {
       
     } catch (error) {
       // Transform parsing failed - fall back to simple mapping
-      if (this.log) {
-        console.warn('AME: Transform parsing failed, using simple coordinate mapping', {
-          element: el,
-          transform,
-          error: error.message
-        });
-      }
-      
       return {
         canvasX: Math.floor(relativeX * (canvas.width / rect.width)),
         canvasY: Math.floor(relativeY * (canvas.height / rect.height))
@@ -1186,9 +1068,6 @@ export default class Manager {
     
     // Check for singular matrix (non-invertible)
     if (Math.abs(det) < 1e-10) {
-      if (this.log) {
-        console.warn('AME: Transform matrix is singular (non-invertible), using identity');
-      }
       return [1, 0, 0, 1, 0, 0];
     }
     
@@ -1228,41 +1107,7 @@ export default class Manager {
    * @private
    */
   _showBrowserCompatibilityWarning() {
-    if (this._compatibilityWarningShown) return; // Show only once
-    this._compatibilityWarningShown = true;
-
-    const missingFeatures = [];
-    const recommendedPolyfills = [];
-
-    // Check for missing APIs
-    if (!('ResizeObserver' in window)) {
-        missingFeatures.push('ResizeObserver');
-        recommendedPolyfills.push('https://github.com/que-etc/resize-observer-polyfill');
-    }
-
-    if (!('IntersectionObserver' in window)) {
-        missingFeatures.push('IntersectionObserver');
-        recommendedPolyfills.push('https://github.com/w3c/IntersectionObserver/tree/main/polyfill');
-    }
-
-    if (!('PointerEvent' in window)) {
-        missingFeatures.push('PointerEvent');
-        console.info('AME: Falling back to mouse/touch events (PointerEvent not supported)');
-    }
-
-    if (missingFeatures.length > 0) {
-        console.group('AME: Browser Compatibility Notice');
-        console.warn(`Missing features: ${missingFeatures.join(', ')}`);
-        console.info('🌐 Browser Support:');
-        console.info('• Chrome 50+ ✓');
-        console.info('• Firefox 50+ ✓');  
-        console.info('• Safari 11+ ✓');
-        console.info('• Edge 18+ ✓');
-        console.info('📦 Recommended Polyfills:');
-        recommendedPolyfills.forEach(polyfill => console.info(`• ${polyfill}`));
-        console.info('💡 For optimal performance, consider upgrading your browser');
-        console.groupEnd();
-    }
+    // Compatibility warnings removed for production optimization
   }
 
 }
