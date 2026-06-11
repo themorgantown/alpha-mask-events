@@ -1,89 +1,77 @@
 /**
  * @jest-environment node
+ *
+ * End-to-end tests for the `ame-generate-masks` CLI. These exercise the real
+ * binary in a child process, which needs the native `canvas` package. Because
+ * `canvas` is an OPTIONAL dependency, the whole suite is skipped (not failed)
+ * on machines where it is not installed/buildable, so `npm test` stays green
+ * across operating systems.
  */
 import fs from 'fs';
 import path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { fileURLToPath } from 'url';
-import { jest, describe, it, expect, afterEach } from '@jest/globals';
+import { createRequire } from 'module';
+import { describe, it, expect, afterEach } from '@jest/globals';
 
 const execFileAsync = promisify(execFile);
-
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BIN_PATH = path.resolve(__dirname, '../bin/generate-masks.js');
 const FIXTURE_IMG = path.resolve(__dirname, 'fixtures/half.png');
 const OUT_PATH = path.resolve(__dirname, 'tmp_mask.json');
 
-describe('🛠️  generate-masks CLI', () => {
-  // Increase timeout for file operations
-  jest.setTimeout(30000);
+// Detect whether the REAL `canvas` native module can be loaded. `createRequire`
+// bypasses Jest's `^canvas$` mock so this reflects what the child process sees.
+let canvasAvailable = false;
+try {
+  createRequire(import.meta.url)('canvas');
+  canvasAvailable = true;
+} catch {
+  canvasAvailable = false;
+}
 
+const describeWithCanvas = canvasAvailable ? describe : describe.skip;
+
+if (!canvasAvailable) {
+  // eslint-disable-next-line no-console
+  console.warn('⏭️  Skipping generate-masks CLI tests: native "canvas" module not available.');
+}
+
+describeWithCanvas('🛠️  generate-masks CLI', () => {
   afterEach(() => {
     if (fs.existsSync(OUT_PATH)) fs.unlinkSync(OUT_PATH);
   });
 
   it('🎯 generates a mask JSON for a PNG', async () => {
-    console.log('🔍 Debug: Starting CLI test...');
-    console.log('📁 BIN_PATH:', BIN_PATH);
-    console.log('🖼️  FIXTURE_IMG:', FIXTURE_IMG);
-    console.log('📄 OUT_PATH:', OUT_PATH);
-    console.log('🔍 Image exists:', fs.existsSync(FIXTURE_IMG));
-    
-    try {
-      const { stdout, stderr } = await execFileAsync('node', [BIN_PATH, FIXTURE_IMG, '--out', OUT_PATH, '--threshold', '0.5'], {
-        timeout: 20000, // 20 second timeout
-        encoding: 'utf8'
-      });
-      
-      console.log('📝 CLI stdout:', stdout);
-      console.log('📝 CLI stderr:', stderr);
-      console.log('📄 Output file exists after CLI:', fs.existsSync(OUT_PATH));
-      
-      expect(fs.existsSync(OUT_PATH)).toBe(true);
-      const json = JSON.parse(fs.readFileSync(OUT_PATH, 'utf8'));
-      expect(json[FIXTURE_IMG]).toBeDefined();
-      expect(json[FIXTURE_IMG].width).toBeGreaterThan(0);
-      expect(json[FIXTURE_IMG].height).toBeGreaterThan(0);
-      expect(Array.isArray(json[FIXTURE_IMG].rects)).toBe(true);
-    } catch (error) {
-      console.error('❌ CLI Error:', error.message);
-      console.error('🔍 Error code:', error.code);
-      console.error('🔍 Error signal:', error.signal);
-      if (error.stderr) console.error('📝 Stderr:', error.stderr);
-      if (error.stdout) console.error('📝 Stdout:', error.stdout);
-      throw error;
-    }
+    await execFileAsync('node', [BIN_PATH, FIXTURE_IMG, '--out', OUT_PATH, '--threshold', '0.5'], {
+      timeout: 20000,
+      encoding: 'utf8'
+    });
+
+    expect(fs.existsSync(OUT_PATH)).toBe(true);
+    const json = JSON.parse(fs.readFileSync(OUT_PATH, 'utf8'));
+    expect(json[FIXTURE_IMG]).toBeDefined();
+    expect(json[FIXTURE_IMG].width).toBeGreaterThan(0);
+    expect(json[FIXTURE_IMG].height).toBeGreaterThan(0);
+    expect(Array.isArray(json[FIXTURE_IMG].rects)).toBe(true);
   });
 
   it('📝 prints a success message', async () => {
-    try {
-      const { stdout, stderr } = await execFileAsync('node', [BIN_PATH, FIXTURE_IMG, '--out', OUT_PATH], {
-        timeout: 20000, // 20 second timeout
-        encoding: 'utf8'
-      });
-      
-      expect(stdout).toMatch(/Masks written to/);
-    } catch (error) {
-      console.error('❌ CLI Error:', error.message);
-      if (error.stderr) console.error('📝 Stderr:', error.stderr);
-      if (error.stdout) console.error('📝 Stdout:', error.stdout);
-      throw error;
-    }
+    const { stdout } = await execFileAsync('node', [BIN_PATH, FIXTURE_IMG, '--out', OUT_PATH], {
+      timeout: 20000,
+      encoding: 'utf8'
+    });
+    expect(stdout).toMatch(/Masks written to/);
   });
+});
 
+// This case never touches `canvas` (it fails during argument parsing), so it
+// can run everywhere.
+describe('🛠️  generate-masks CLI argument validation', () => {
   it('❌ fails if no images are provided', async () => {
-    try {
-      await execFileAsync('node', [BIN_PATH, '--out', OUT_PATH], {
-        timeout: 10000, // 10 second timeout for failure case
-        encoding: 'utf8'
-      });
-      // If we get here, the command unexpectedly succeeded
-      throw new Error('Expected command to fail but it succeeded');
-    } catch (error) {
-      // Should have an error because no images provided
-      console.log('🔍 Error details:', { code: error.code, signal: error.signal, message: error.message });
-      expect(error.code || error.signal || 1).toBeGreaterThan(0);
-    }
+    await expect(
+      execFileAsync('node', [BIN_PATH, '--out', OUT_PATH], { timeout: 10000, encoding: 'utf8' })
+    ).rejects.toMatchObject({ code: expect.any(Number) });
   });
 });

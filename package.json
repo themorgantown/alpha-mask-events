@@ -15,7 +15,7 @@
     "build": "rollup -c",
     "test": "node --experimental-vm-modules node_modules/.bin/jest",
     "test:generate-images": "node __tests__/fixtures/create-test-images.js",
-    "lint": "eslint src",
+    "lint": "eslint src bin",
     "prepublishOnly": "npm run build && npm test"
   },
   "files": [
@@ -44,10 +44,15 @@
   "bugs": {
     "url": "https://github.com/themorgantown/alpha-mask-events/issues"
   },
-  "homepage": "https://github.com/themorgantown/alpha-mask-events",
+  "homepage": "https://github.com/themorgantown/alpha-mask-events#readme",
+  "engines": {
+    "node": ">=18"
+  },
   "dependencies": {
-    "canvas": "^2.11.2",
     "yargs": "^17.7.2"
+  },
+  "optionalDependencies": {
+    "canvas": "^2.11.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",
