@@ -359,7 +359,7 @@ npm run lint         # ESLint (src + bin)
 Run a single test file:
 
 ```bash
-node --experimental-vm-modules node_modules/.bin/jest __tests__/manager.test.js
+node --experimental-vm-modules ./node_modules/jest/bin/jest.js __tests__/manager.test.js
 ```
 
 CLI integration tests automatically **skip** when the native `canvas` module is

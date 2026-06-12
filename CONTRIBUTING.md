@@ -21,7 +21,7 @@ to work on the CLI.
 | ---- | ------- |
 | Build (Rollup → `dist/`) | `npm run build` |
 | Run tests | `npm test` |
-| Run one test file | `node --experimental-vm-modules node_modules/.bin/jest __tests__/manager.test.js` |
+| Run one test file | `node --experimental-vm-modules ./node_modules/jest/bin/jest.js __tests__/manager.test.js` |
 | Lint | `npm run lint` |
 | Regenerate test fixtures (needs `canvas`) | `npm run test:generate-images` |
 
