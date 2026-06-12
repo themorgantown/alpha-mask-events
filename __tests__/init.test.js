@@ -41,14 +41,16 @@ describe('🚀  init() autoScan option', () => {
   });
 
   test('manual register() still works after init({ autoScan: false })', async () => {
-    const { register } = await import('../src/index.js');
+    document.body.innerHTML = '<img src="a.png" class="alpha-mask-events" id="a" />';
+    const { init, register } = await import('../src/index.js');
+
+    init({ autoScan: false });
     const img = document.getElementById('a');
 
     register(img);
     // Wait for the mock image to "load" and populate the registry entry.
     await new Promise((r) => setTimeout(r, 10));
 
-    const { init } = await import('../src/index.js');
     expect(init().registry.has(img)).toBe(true);
   });
 });
