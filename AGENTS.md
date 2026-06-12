@@ -33,7 +33,7 @@ npm test               # Jest (ESM via --experimental-vm-modules)
 npm run lint           # ESLint over src + bin
 
 # single test file
-node --experimental-vm-modules node_modules/.bin/jest __tests__/manager.test.js
+node --experimental-vm-modules ./node_modules/jest/bin/jest.js __tests__/manager.test.js
 ```
 
 All three of `lint`, `build`, and `test` must pass before committing. CI runs
