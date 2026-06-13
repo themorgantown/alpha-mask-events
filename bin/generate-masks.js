@@ -14,10 +14,13 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { createCanvas, loadImage } from 'canvas';
 // Fix yargs import for ESM compatibility
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
+
+// `canvas` is an OPTIONAL native dependency. It is loaded lazily (only when the
+// CLI actually processes images) so that importing this module for its pure
+// helpers — or running argument validation — never requires the native build.
 
 // Prevent CLI execution during test imports (but allow when called via execFile)
 const isTestEnvironment = process.env.NODE_ENV === 'test' && process.env.JEST_WORKER_ID !== undefined && !process.argv.includes('--out');
@@ -35,8 +38,9 @@ if (!isTestEnvironment || process.argv.includes('--out')) {
 }
 
 // Simple box blur on alpha channel
-function blurAlpha(data, width, height, radius) {
-  const out = new Float32Array(data.length);
+export function blurAlpha(data, width, height, radius) {
+  // One averaged alpha value per pixel (data is RGBA, so width*height entries).
+  const out = new Float32Array(width * height);
   for (let y = 0; y < height; ++y) {
     for (let x = 0; x < width; ++x) {
       let sum = 0, count = 0;
@@ -56,7 +60,7 @@ function blurAlpha(data, width, height, radius) {
 }
 
 // Find rectangles of contiguous opaque pixels in each row
-function maskToRects(mask, width, height) {
+export function maskToRects(mask, width, height) {
   const rects = [];
   for (let y = 0; y < height; ++y) {
     let x = 0;
@@ -129,60 +133,104 @@ export function hasTransparency(imageData) {
   return false;
 }
 
+/**
+ * Convert a set of images into per-image opaque-region rectangles.
+ *
+ * The native `canvas` module is injected so this function stays pure and
+ * testable: callers pass either the real `canvas` package or a stub exposing
+ * `loadImage` and `createCanvas`.
+ *
+ * @param {string[]} images - File paths or URLs to process.
+ * @param {{ threshold?: number, blur?: number }} [opts] - Mask options.
+ * @param {{ loadImage: Function, createCanvas: Function }} canvasModule - Canvas implementation.
+ * @returns {Promise<{ output: Object, errors: Array<{ path: string, error: string }> }>}
+ */
+export async function processImages(images, opts = {}, canvasModule) {
+  const { threshold = 0.1, blur = 1 } = opts;
+  const { loadImage, createCanvas } = canvasModule;
+  const output = {};
+  const errors = [];
+
+  for (const imagePath of images) {
+    try {
+      // Validate file format
+      if (!isSupportedImageFormat(imagePath)) {
+        // Unsupported extensions are silently skipped (no error).
+        continue;
+      }
+
+      const img = await loadImage(imagePath);
+      const { width, height } = img;
+      const canvas = createCanvas(width, height);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0);
+      const imageData = ctx.getImageData(0, 0, width, height);
+
+      const alpha = imageData.data;
+
+      // Blur alpha channel
+      const blurredAlpha = blurAlpha(alpha, width, height, blur);
+
+      // Threshold to create mask
+      const mask = [];
+      for (let i = 0; i < width * height; ++i) {
+        mask[i] = (blurredAlpha[i] / 255) > threshold ? 1 : 0;
+      }
+
+      // Convert mask to rectangles
+      const rects = maskToRects(mask, width, height);
+
+      output[imagePath] = { width, height, rects };
+    } catch (error) {
+      errors.push({ path: imagePath, error: error.message });
+      // Continue processing other files instead of stopping
+      continue;
+    }
+  }
+
+  return { output, errors };
+}
+
+/**
+ * Lazily load the optional native `canvas` module, printing platform-specific
+ * install guidance and exiting cleanly if it is unavailable.
+ * @returns {Promise<{ loadImage: Function, createCanvas: Function }>}
+ */
+async function loadCanvasOrExit() {
+  try {
+    const mod = await import('canvas');
+    // CJS/ESM interop: named exports may live on the namespace or on `default`.
+    const createCanvas = mod.createCanvas ?? mod.default?.createCanvas;
+    const loadImage = mod.loadImage ?? mod.default?.loadImage;
+    return { createCanvas, loadImage };
+  } catch {
+    const guide = {
+      linux: 'sudo apt-get install -y build-essential libcairo2-dev libpango1.0-dev libjpeg-dev libgif-dev librsvg2-dev',
+      darwin: 'brew install pkg-config cairo pango libpng jpeg giflib librsvg',
+      win32: 'Install the build tools from https://github.com/Automattic/node-canvas/wiki/Installation:-Windows'
+    }[process.platform];
+    console.error('❌ The optional "canvas" package is required to generate masks but is not installed.');
+    console.error('   Install it with:  npm install canvas');
+    if (guide) console.error(`   System prerequisites: ${guide}`);
+    process.exit(1);
+  }
+}
+
 // Only run the main script if this file is executed directly (and arguments are available)
 if (argv && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   (async () => {
-    const output = {};
-    const errors = [];
-    
-    for (const path of argv._) {
-      try {
-        // Validate file format
-        if (!isSupportedImageFormat(path)) {
-          console.warn(`⚠️  Skipping ${path}: Unsupported format. Supported: PNG, WebP, AVIF, GIF, BMP, TIFF`);
-          continue;
-        }
+    const canvasModule = await loadCanvasOrExit();
 
-        console.log(`📸 Processing ${path}...`);
-        const img = await loadImage(path);
-        const canvas = createCanvas(img.width, img.height);
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
-        const { width, height } = img;
-        const imageData = ctx.getImageData(0, 0, width, height);
-
-        // Check if image actually has transparency
-        if (!hasTransparency(imageData)) {
-          console.warn(`⚠️  ${path}: No transparency detected, but processing anyway...`);
-        }
-
-        let alpha = imageData.data;
-
-        // Blur alpha channel
-        const blurredAlpha = blurAlpha(alpha, width, height, argv.blur);
-
-        // Threshold to create mask
-        const mask = [];
-        for (let i = 0; i < width * height; ++i) {
-          mask[i] = (blurredAlpha[i] / 255) > argv.threshold ? 1 : 0;
-        }
-
-        // Convert mask to rectangles
-        const rects = maskToRects(mask, width, height);
-
-        output[path] = { width, height, rects };
-        console.log(`✅ Successfully processed ${path} (${width}x${height}, ${rects.length} rectangles)`);
-        
-      } catch (error) {
-        const errorMsg = `❌ Failed to process ${path}: ${error.message}`;
-        console.error(errorMsg);
-        errors.push({ path, error: error.message });
-        
-        // Continue processing other files instead of stopping
-        continue;
-      }
+    for (const p of argv._) {
+      console.log(`📸 Processing ${p}...`);
     }
-    
+
+    const { output, errors } = await processImages(
+      argv._,
+      { threshold: argv.threshold, blur: argv.blur },
+      canvasModule
+    );
+
     // Write output and show summary
     if (Object.keys(output).length > 0) {
       fs.writeFileSync(argv.out, JSON.stringify(output, null, 2));
@@ -192,7 +240,7 @@ if (argv && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
       console.error('\n❌ No images were successfully processed');
       process.exit(1);
     }
-    
+
     if (errors.length > 0) {
       console.warn(`\n⚠️  ${errors.length} images failed to process:`);
       errors.forEach(({ path, error }) => console.warn(`   - ${path}: ${error}`));

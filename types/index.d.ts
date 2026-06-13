@@ -1,6 +1,8 @@
 export interface AMEOptions {
   /** transparency threshold (0–1) */
   threshold?: number;
+  /** auto-detect elements with the `alpha-mask-events` class (default: true). Only honored by init(). */
+  autoScan?: boolean;
   /** enable debug logging */
   log?: boolean;
   /** enable automatic performance optimization for off-screen elements */

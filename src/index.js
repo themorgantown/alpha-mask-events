@@ -10,26 +10,37 @@ let mgr = null;
  * transparent parts of PNG images and elements with PNG background-images.
  * 
  * @param {Object} options - Configuration options
- * @param {number} [options.threshold=0.999] - Transparency threshold (0-1). Pixels with alpha values less 
+ * @param {number} [options.threshold=0.999] - Transparency threshold (0-1). Pixels with alpha values less
  *                                         than or equal to this value will be click-through.
  *                                         Default is 0.999 (nearly transparent pixels pass clicks through)
+ * @param {boolean} [options.autoScan=true] - Auto-detect elements with the 'alpha-mask-events' class
+ *                                         (and watch the DOM for new ones). Set to false to register
+ *                                         elements manually with register().
  * @param {boolean} [options.log=false] - Enable debug logging
  * @param {boolean} [options.useIntersectionObserver=true] - Enable automatic performance optimization for off-screen elements
  * @param {string} [options.intersectionRootMargin='100px'] - Root margin for IntersectionObserver
  * @returns {Object} The manager instance
- * 
+ *
  * @example
  * // Basic initialization
  * AlphaMaskEvents.init();
- * 
+ *
  * @example
  * // Custom threshold (make more pixels click-through)
  * AlphaMaskEvents.init({ threshold: 0.5 });
+ *
+ * @example
+ * // Manual mode: no auto-detection, register elements yourself
+ * AlphaMaskEvents.init({ autoScan: false });
+ * AlphaMaskEvents.register('#logo');
  */
 export function init(options = {}) {
   if (!mgr) {
-    mgr = new Manager(options);
-    mgr.scan();
+    const { autoScan = true, ...managerOptions } = options;
+    mgr = new Manager(managerOptions);
+    if (autoScan) {
+      mgr.scan();
+    }
     mgr.attachListeners();
   }
   return mgr;

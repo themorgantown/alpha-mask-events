@@ -1,32 +1,35 @@
 import js from '@eslint/js';
+import globals from 'globals';
 
 export default [
   js.configs.recommended,
+  // Browser library source
   {
+    files: ['src/**/*.js'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
       globals: {
-        // Browser globals
-        document: 'readonly',
-        window: 'readonly',
-        console: 'readonly',
-        // Browser API globals that were causing linting errors
-        getComputedStyle: 'readonly',
-        ResizeObserver: 'readonly',
-        requestAnimationFrame: 'readonly',
-        MutationObserver: 'readonly',
-        // DOM API globals
-        HTMLElement: 'readonly',
-        CustomEvent: 'readonly',
-        Node: 'readonly',
-        IntersectionObserver: 'readonly',
-        Image: 'readonly'
+        ...globals.browser
       }
     },
     rules: {
-      // Allow expressions like mgr && mgr.remove(target)
+      // Allow expressions like `mgr && mgr.remove(target)`
       'no-unused-expressions': 'off'
-    },
+    }
   },
+  // Node.js CLI / tooling
+  {
+    files: ['bin/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: 'module',
+      globals: {
+        ...globals.node
+      }
+    },
+    rules: {
+      'no-unused-expressions': 'off'
+    }
+  }
 ];

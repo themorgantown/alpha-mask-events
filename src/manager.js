@@ -267,7 +267,7 @@ export default class Manager {
             // Add to cache for future use
             MASK_CACHE.set(src, img);
             };
-            img.onerror = (e) => {
+            img.onerror = () => {
         // Provide format-specific error messages and advice
         const format = formatDetection.format;
         if (format === 'webp') {
@@ -481,7 +481,7 @@ export default class Manager {
                     // Sample the alpha value from the corresponding pixel on the internal canvas
                     const pixelData = ctx.getImageData(canvasX, canvasY, 1, 1).data;
                     alpha = pixelData[3] / 255; // Alpha is the 4th component (0-255)
-                } catch (err) {
+                } catch {
                     // CORS error recovery - use fallback strategy
                     alpha = this._approximateAlphaFromBounds(el, clientX, clientY, rect);
                 }
@@ -558,7 +558,8 @@ export default class Manager {
         cancelable: false  // Not cancelable
       });
       element.dispatchEvent(event);
-    } catch (error) {
+    } catch {
+      // Ignore errors dispatching custom events (e.g. on detached elements)
     }
   }
 
@@ -816,7 +817,7 @@ export default class Manager {
           // Use the 9-argument drawImage to draw the whole source image into the calculated dest rect
           ctx.drawImage(img, 0, 0, imgWidth, imgHeight, dx, dy, dw, dh);
           entry._loggedImageDataError = false; // Reset error log flag on successful draw
-      } catch (e) {
+      } catch {
           // This might happen with certain image types or extreme scaling
       }
   }
@@ -986,7 +987,7 @@ export default class Manager {
         canvasY: Math.floor((transformedCoords.y + rect.height / 2) * (canvas.height / rect.height))
       };
       
-    } catch (error) {
+    } catch {
       // Transform parsing failed - fall back to simple mapping
       return {
         canvasX: Math.floor(relativeX * (canvas.width / rect.width)),

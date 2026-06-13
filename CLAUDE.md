@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build/Test/Lint Commands
 - Build: `npm run build`
 - Test all: `npm test`
-- Run single test: `node --experimental-vm-modules node_modules/.bin/jest __tests__/filename.test.js`
+- Run single test: `node --experimental-vm-modules ./node_modules/jest/bin/jest.js __tests__/filename.test.js`
 - Lint: `npm run lint`
 
 ## Code Style Guidelines
