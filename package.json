@@ -1,6 +1,6 @@
 {
   "name": "alpha-mask-events",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "Enable click‑through on transparent regions of images (PNG, WebP, AVIF, GIF, SVG) using alpha masks.",
   "main": "dist/index.cjs.js",
   "module": "dist/index.esm.js",
@@ -13,9 +13,9 @@
   },
   "scripts": {
     "build": "rollup -c",
-    "test": "node --experimental-vm-modules ./node_modules/jest/bin/jest.js",
+    "test": "node --experimental-vm-modules node_modules/jest-cli/bin/jest.js",
     "test:generate-images": "node __tests__/fixtures/create-test-images.js",
-    "lint": "eslint src bin",
+    "lint": "eslint src",
     "prepublishOnly": "npm run build && npm test"
   },
   "files": [
@@ -44,15 +44,10 @@
   "bugs": {
     "url": "https://github.com/themorgantown/alpha-mask-events/issues"
   },
-  "homepage": "https://github.com/themorgantown/alpha-mask-events#readme",
-  "engines": {
-    "node": ">=18"
-  },
+  "homepage": "https://github.com/themorgantown/alpha-mask-events",
   "dependencies": {
+    "canvas": "^3.2.3",
     "yargs": "^17.7.2"
-  },
-  "optionalDependencies": {
-    "canvas": "^2.11.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.24.0",
