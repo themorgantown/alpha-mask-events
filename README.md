@@ -6,8 +6,6 @@
 
 > Enable click-through on transparent parts of images (PNG, WebP, AVIF, etc.) and background-images, making irregularly shaped UI elements behave naturally.
 
-![Demo GIF](https://example.com/demo-of-alpha-mask-events.gif) 
-
 ## Why use Alpha Mask Events?
 
 Ever been frustrated when:
