@@ -7,9 +7,7 @@
 
 > Make clicks fall through the **transparent** parts of an image and only land on the **opaque** pixels — so irregularly shaped PNG/WebP/AVIF elements behave naturally, without hand-authored CSS `clip-path` or SVG masks.
 
-**[▶ Live demo](https://themorgantown.github.io/alpha-mask-events/)** · **[npm](https://www.npmjs.com/package/alpha-mask-events)** · **[Changelog](CHANGELOG.md)**
-
-The library samples the alpha channel of an element's image under the pointer in real time and flips its `pointer-events` between `auto` (opaque) and `none` (transparent). Stacked elements then receive clicks only where they are actually visible.
+## Why use Alpha Mask Events?
 
 ## Highlights
 
