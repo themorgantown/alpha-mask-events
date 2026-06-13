@@ -23,7 +23,7 @@
       "skipFiles": [
         "<node_internals>/**"
       ],
-      "program": "${workspaceFolder}/node_modules/.bin/jest",
+      "program": "${workspaceFolder}/node_modules/jest-cli/bin/jest.js",
       "args": [
         "--verbose"
       ],
@@ -40,7 +40,7 @@
       "skipFiles": [
         "<node_internals>/**"
       ],
-      "program": "${workspaceFolder}/node_modules/.bin/jest",
+      "program": "${workspaceFolder}/node_modules/jest-cli/bin/jest.js",
       "args": [
         "--verbose",
         "--runInBand"
@@ -88,7 +88,7 @@
       "skipFiles": [
         "<node_internals>/**"
       ],
-      "program": "${workspaceFolder}/node_modules/.bin/jest",
+      "program": "${workspaceFolder}/node_modules/jest-cli/bin/jest.js",
       "args": [
         "--runInBand",
         "${input:testFile}"

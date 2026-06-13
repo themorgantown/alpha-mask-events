@@ -12,6 +12,8 @@
  */
 
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { createCanvas, loadImage } from 'canvas';
 // Fix yargs import for ESM compatibility
 import yargs from 'yargs';
@@ -128,7 +130,7 @@ export function hasTransparency(imageData) {
 }
 
 // Only run the main script if this file is executed directly (and arguments are available)
-if (import.meta.url === `file://${process.argv[1]}` && argv) {
+if (argv && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   (async () => {
     const output = {};
     const errors = [];
