@@ -19,3 +19,4 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Browser compatibility: Include fallbacks for modern APIs (e.g., PointerEvent)
 - Use null checks with `&&` operator for conditional execution
 - Export both named exports and a default object in public API modules
+- 
