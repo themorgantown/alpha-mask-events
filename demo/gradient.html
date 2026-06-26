@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Alpha Mask Events - Gradient &amp; Opacity Demo</title>
+    <link rel="icon" href="">
+    <style>
+      :root {
+        --primary-color: #007bff;
+        --success-color: #28a745;
+        --warning-color: #ffc107;
+        --danger-color: #dc3545;
+        --pink: #e83e8c;
+        --light-bg: #fafafa;
+        --dark-text: #333;
+        --border-color: #ddd;
+        --shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        background: var(--light-bg);
+        margin: 0;
+        padding: 2rem;
+        line-height: 1.6;
+        color: var(--dark-text);
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 2.5rem;
+      }
+
+      .header h1 {
+        color: var(--primary-color);
+        margin-bottom: 0.5rem;
+      }
+
+      .header p {
+        font-size: 1.1rem;
+        color: #666;
+        max-width: 680px;
+        margin: 0 auto;
+      }
+
+      .nav-link {
+        display: inline-block;
+        margin-top: 1rem;
+        color: var(--primary-color);
+        text-decoration: none;
+        font-weight: 600;
+      }
+
+      .nav-link:hover {
+        text-decoration: underline;
+      }
+
+      /* Controls */
+      .demo-controls {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        margin: 0 auto 2rem;
+        max-width: 800px;
+      }
+
+      .control-group {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1rem;
+      }
+
+      .control-group:last-child {
+        margin-bottom: 0;
+      }
+
+      .control-group label {
+        font-weight: 600;
+        min-width: 150px;
+      }
+
+      .control-group input[type="range"] {
+        flex: 1;
+        max-width: 320px;
+      }
+
+      .value-display {
+        font-family: 'Courier New', monospace;
+        background: #f8f9fa;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        min-width: 56px;
+        text-align: center;
+      }
+
+      /* Demo grid */
+      .demo-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+        gap: 2rem;
+        max-width: 1100px;
+        margin: 0 auto 2rem;
+      }
+
+      .demo-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.5rem;
+        box-shadow: var(--shadow);
+        text-align: center;
+      }
+
+      .demo-card h3 {
+        margin-top: 0;
+        color: var(--primary-color);
+      }
+
+      .demo-card p {
+        color: #666;
+        font-size: 0.9rem;
+        min-height: 2.6em;
+      }
+
+      /*
+        The "stage" stacks two layers:
+          1. A full-size catch button BEHIND the gradient. Clicks land here only
+             when they pass THROUGH a transparent part of the gradient.
+          2. The gradient image on top. Alpha Mask Events toggles its
+             pointer-events per-pixel, so opaque parts catch clicks and
+             transparent parts let them fall through to the catch button.
+        An overlay on top draws the current threshold boundary for clarity.
+      */
+      .stage {
+        position: relative;
+        margin: 0 auto;
+        border-radius: 8px;
+        overflow: hidden;
+        /* Checkerboard so "transparent" is visually obvious */
+        background-image:
+          linear-gradient(45deg, #e9ecef 25%, transparent 25%),
+          linear-gradient(-45deg, #e9ecef 25%, transparent 25%),
+          linear-gradient(45deg, transparent 75%, #e9ecef 75%),
+          linear-gradient(-45deg, transparent 75%, #e9ecef 75%);
+        background-size: 20px 20px;
+        background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+        border: 2px solid var(--border-color);
+      }
+
+      .stage-linear {
+        width: 400px;
+        max-width: 100%;
+        aspect-ratio: 2 / 1;
+      }
+
+      .stage-radial {
+        width: 300px;
+        max-width: 100%;
+        aspect-ratio: 1 / 1;
+      }
+
+      .catch-layer {
+        position: absolute;
+        inset: 0;
+        border: none;
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        cursor: crosshair;
+        font: inherit;
+        color: var(--dark-text);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .catch-layer .catch-hint {
+        font-size: 0.8rem;
+        color: #adb5bd;
+        pointer-events: none;
+        align-self: flex-end;
+        margin-bottom: 0.5rem;
+      }
+
+      .gradient-img {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+        transition: filter 0.15s ease;
+      }
+
+      .gradient-img.opaque-hover {
+        filter: brightness(1.12) drop-shadow(0 0 8px rgba(0, 0, 0, 0.25));
+      }
+
+      /* Threshold boundary overlay */
+      .overlay {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 5;
+      }
+
+      .overlay.hidden {
+        display: none;
+      }
+
+      /* Linear: vertical boundary line + shaded click-through band */
+      .boundary-line {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: var(--danger-color);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
+      }
+
+      .boundary-line::after {
+        content: 'alpha = threshold';
+        position: absolute;
+        top: 4px;
+        left: 5px;
+        font-size: 0.65rem;
+        color: var(--danger-color);
+        background: rgba(255, 255, 255, 0.85);
+        padding: 0 3px;
+        border-radius: 3px;
+        white-space: nowrap;
+      }
+
+      .clickthrough-band {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        right: 0;
+        background: repeating-linear-gradient(
+          45deg,
+          rgba(220, 53, 69, 0.12),
+          rgba(220, 53, 69, 0.12) 6px,
+          rgba(220, 53, 69, 0.04) 6px,
+          rgba(220, 53, 69, 0.04) 12px
+        );
+      }
+
+      /* Radial: dashed ring marking the clickable circle */
+      .boundary-ring {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        border: 2px dashed var(--danger-color);
+        border-radius: 50%;
+        box-sizing: border-box;
+      }
+
+      /* Cursor read-out */
+      .readout {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.5rem;
+        margin-top: 1rem;
+      }
+
+      .readout .cell {
+        background: #f8f9fa;
+        border-radius: 6px;
+        padding: 0.5rem;
+      }
+
+      .readout .cell .big {
+        font-size: 1.2rem;
+        font-weight: bold;
+        font-family: 'Courier New', monospace;
+        color: var(--primary-color);
+      }
+
+      .readout .cell .lbl {
+        font-size: 0.75rem;
+        color: #666;
+      }
+
+      .verdict {
+        margin-top: 0.75rem;
+        font-weight: 600;
+        min-height: 1.4em;
+      }
+
+      .verdict.opaque {
+        color: var(--success-color);
+      }
+
+      .verdict.transparent {
+        color: var(--danger-color);
+      }
+
+      /* Log */
+      .log-container {
+        background: #1e1e1e;
+        color: #f8f8f2;
+        padding: 1rem;
+        border-radius: 8px;
+        font-family: 'Courier New', monospace;
+        font-size: 0.85rem;
+        max-height: 180px;
+        overflow-y: auto;
+        margin-top: 1rem;
+      }
+
+      .log-entry {
+        margin-bottom: 0.25rem;
+        padding: 0.2rem 0.35rem;
+        border-radius: 2px;
+      }
+
+      .log-entry.info { background: rgba(52, 152, 219, 0.2); }
+      .log-entry.success { background: rgba(46, 204, 113, 0.2); }
+      .log-entry.warning { background: rgba(241, 196, 15, 0.2); }
+      .log-entry.error { background: rgba(231, 76, 60, 0.2); }
+
+      .explain {
+        background: white;
+        padding: 1.5rem;
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        max-width: 800px;
+        margin: 0 auto;
+      }
+
+      .explain ul {
+        text-align: left;
+        max-width: 640px;
+        margin: 0 auto;
+      }
+
+      @media (max-width: 768px) {
+        body { padding: 1rem; }
+        .demo-container { grid-template-columns: 1fr; }
+        .control-group { flex-direction: column; align-items: stretch; }
+        .control-group label { min-width: auto; }
+      }
+    </style>
+
+    <!-- Load the library: local build first, CDN fallback (same strategy as index.html). -->
+    <script>
+      (function loadAlphaMaskEvents() {
+        const LOCAL_BUILD_PATH = '../dist/alpha-mask-events.umd.min.js';
+        const CDN_FALLBACK = 'https://cdn.jsdelivr.net/npm/alpha-mask-events@1/dist/alpha-mask-events.umd.min.js';
+
+        function loadScript(src, onSuccess, onError) {
+          const script = document.createElement('script');
+          script.src = src;
+          script.async = true;
+          script.addEventListener('load', onSuccess);
+          script.addEventListener('error', onError);
+          document.head.appendChild(script);
+        }
+
+        function attemptCDNLoad() {
+          loadScript(CDN_FALLBACK,
+            () => document.dispatchEvent(new CustomEvent('alphaMaskEventsLoaded', { detail: { source: 'cdn' } })),
+            () => document.dispatchEvent(new CustomEvent('alphaMaskEventsLoadError'))
+          );
+        }
+
+        loadScript(LOCAL_BUILD_PATH,
+          () => document.dispatchEvent(new CustomEvent('alphaMaskEventsLoaded', { detail: { source: 'local' } })),
+          attemptCDNLoad
+        );
+      })();
+    </script>
+  </head>
+  <body>
+    <div class="header">
+      <h1>Gradient &amp; Opacity Demo</h1>
+      <p>
+        These images fade a solid colour to <strong>fully transparent</strong>.
+        Drag the <strong>opacity threshold</strong> slider to sweep the
+        clickable boundary across the fade: pixels more opaque than the
+        threshold <strong>catch clicks</strong>, while more-transparent pixels
+        let clicks <strong>fall through</strong> to the button behind.
+      </p>
+      <a class="nav-link" href="./index.html">← Back to the main demo</a>
+    </div>
+
+    <div class="demo-controls">
+      <h3 style="margin-top:0;">Live Controls</h3>
+      <div class="control-group">
+        <label for="threshold-slider">Opacity threshold:</label>
+        <input type="range" id="threshold-slider" min="0" max="1" step="0.01" value="0.5" />
+        <span class="value-display" id="threshold-value">0.50</span>
+      </div>
+      <div class="control-group">
+        <label for="overlay-toggle">Show boundary overlay:</label>
+        <input type="checkbox" id="overlay-toggle" checked />
+        <label for="log-toggle" style="min-width:auto;">Debug log:</label>
+        <input type="checkbox" id="log-toggle" checked />
+        <span class="value-display" id="library-source">…</span>
+      </div>
+    </div>
+
+    <div class="demo-container">
+      <!-- Linear gradient card -->
+      <div class="demo-card">
+        <h3>Linear fade → transparent</h3>
+        <p>Opaque on the left, transparent on the right. The red line marks
+           where <code>alpha&nbsp;=&nbsp;threshold</code>; everything in the
+           striped band is click-through.</p>
+        <div class="stage stage-linear" id="stage-linear">
+          <button type="button" class="catch-layer" data-name="linear">
+            <span class="catch-hint">↑ transparent side falls through to here</span>
+          </button>
+          <img
+            class="gradient-img alpha-mask-events"
+            id="img-linear"
+            src="./gradient-linear.svg"
+            alt="Linear gradient fading to transparent"
+            crossorigin="anonymous"
+          />
+          <div class="overlay" id="overlay-linear">
+            <div class="clickthrough-band" id="band-linear"></div>
+            <div class="boundary-line" id="line-linear"></div>
+          </div>
+        </div>
+        <div class="readout">
+          <div class="cell"><div class="big" id="alpha-linear">–</div><div class="lbl">alpha @ cursor</div></div>
+          <div class="cell"><div class="big" id="thr-linear">0.50</div><div class="lbl">threshold</div></div>
+          <div class="cell"><div class="big" id="pos-linear">–</div><div class="lbl">x position</div></div>
+        </div>
+        <div class="verdict" id="verdict-linear">Move your cursor over the gradient…</div>
+      </div>
+
+      <!-- Radial gradient card -->
+      <div class="demo-card">
+        <h3>Radial fade → transparent</h3>
+        <p>Opaque in the centre, transparent at the edges. The dashed ring is
+           the clickable circle — raise the threshold and it shrinks toward the
+           solid core.</p>
+        <div class="stage stage-radial" id="stage-radial">
+          <button type="button" class="catch-layer" data-name="radial">
+            <span class="catch-hint">↑ transparent edges fall through to here</span>
+          </button>
+          <img
+            class="gradient-img alpha-mask-events"
+            id="img-radial"
+            src="./gradient-radial.svg"
+            alt="Radial gradient fading to transparent"
+            crossorigin="anonymous"
+          />
+          <div class="overlay" id="overlay-radial">
+            <div class="boundary-ring" id="ring-radial"></div>
+          </div>
+        </div>
+        <div class="readout">
+          <div class="cell"><div class="big" id="alpha-radial">–</div><div class="lbl">alpha @ cursor</div></div>
+          <div class="cell"><div class="big" id="thr-radial">0.50</div><div class="lbl">threshold</div></div>
+          <div class="cell"><div class="big" id="pos-radial">–</div><div class="lbl">dist. from centre</div></div>
+        </div>
+        <div class="verdict" id="verdict-radial">Move your cursor over the gradient…</div>
+      </div>
+    </div>
+
+    <div class="explain">
+      <h3 style="margin-top:0;">How the threshold maps onto a gradient</h3>
+      <ul>
+        <li><strong>Per-pixel alpha:</strong> the library draws the image to an
+          off-screen canvas and reads the alpha channel under the cursor.</li>
+        <li><strong>The rule:</strong> <code>alpha &gt; threshold</code> →
+          <code>pointer-events: auto</code> (clickable); otherwise
+          <code>pointer-events: none</code> (click-through).</li>
+        <li><strong>On a gradient</strong> alpha changes smoothly, so the
+          threshold acts like a movable cut line: it slides the
+          opaque/transparent boundary along the fade in real time.</li>
+        <li><strong>Proof of click-through:</strong> a button sits behind each
+          gradient. Click the solid part and the gradient catches it; click the
+          faded part and the click reaches the button beneath.</li>
+      </ul>
+      <div class="log-container" id="debug-log"></div>
+    </div>
+
+    <script>
+      // ----- State -----
+      let manager;
+      let threshold = 0.5;
+      let debugEnabled = true;
+      let overlayEnabled = true;
+
+      const logContainer = document.getElementById('debug-log');
+
+      function log(message, type = 'info') {
+        if (!debugEnabled) return;
+        const entry = document.createElement('div');
+        entry.className = `log-entry ${type}`;
+        entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+        logContainer.appendChild(entry);
+        logContainer.scrollTop = logContainer.scrollHeight;
+        while (logContainer.children.length > 50) {
+          logContainer.removeChild(logContainer.firstChild);
+        }
+      }
+
+      // ----- Off-screen sampler: read true alpha at a cursor position -----
+      const samplerCanvases = new WeakMap();
+
+      function alphaAt(img, clientX, clientY) {
+        const rect = img.getBoundingClientRect();
+        const x = clientX - rect.left;
+        const y = clientY - rect.top;
+        if (x < 0 || y < 0 || x >= rect.width || y >= rect.height) return null;
+        if (!img.naturalWidth || !img.naturalHeight) return null;
+
+        let canvas = samplerCanvases.get(img);
+        if (!canvas) {
+          canvas = document.createElement('canvas');
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          const c = canvas.getContext('2d', { willReadFrequently: true });
+          c.drawImage(img, 0, 0, canvas.width, canvas.height);
+          samplerCanvases.set(img, canvas);
+        }
+
+        const nx = Math.min(canvas.width - 1, Math.floor((x / rect.width) * canvas.width));
+        const ny = Math.min(canvas.height - 1, Math.floor((y / rect.height) * canvas.height));
+        try {
+          const px = canvas.getContext('2d').getImageData(nx, ny, 1, 1).data;
+          return { alpha: px[3] / 255, relX: x / rect.width, relY: y / rect.height, rect };
+        } catch {
+          // Canvas tainted (e.g. opened via file://). Fall back to gradient math.
+          return { alpha: null, relX: x / rect.width, relY: y / rect.height, rect };
+        }
+      }
+
+      // ----- Overlay geometry (derived from the known gradient maths) -----
+      function updateOverlays() {
+        // Linear: alpha = 1 - relX  ⇒  boundary at relX = 1 - threshold
+        const linEl = document.getElementById('line-linear');
+        const bandEl = document.getElementById('band-linear');
+        const boundaryPct = (1 - threshold) * 100;
+        linEl.style.left = boundaryPct + '%';
+        bandEl.style.left = boundaryPct + '%';
+
+        // Radial: alpha = 1 - dist/halfSize ⇒ clickable radius = (1 - threshold) * halfSize
+        const stage = document.getElementById('stage-radial');
+        const half = stage.clientHeight / 2;
+        const ring = document.getElementById('ring-radial');
+        const diameter = 2 * (1 - threshold) * half;
+        ring.style.width = diameter + 'px';
+        ring.style.height = diameter + 'px';
+      }
+
+      function setOverlayVisible(visible) {
+        overlayEnabled = visible;
+        document.getElementById('overlay-linear').classList.toggle('hidden', !visible);
+        document.getElementById('overlay-radial').classList.toggle('hidden', !visible);
+      }
+
+      // ----- Cursor read-out wiring -----
+      function wireReadout(imgId, kind) {
+        const img = document.getElementById(imgId);
+        const alphaCell = document.getElementById('alpha-' + kind);
+        const posCell = document.getElementById('pos-' + kind);
+        const verdict = document.getElementById('verdict-' + kind);
+
+        function onMove(e) {
+          const sample = alphaAt(img, e.clientX, e.clientY);
+          if (!sample) {
+            alphaCell.textContent = '–';
+            posCell.textContent = '–';
+            verdict.textContent = 'Move your cursor over the gradient…';
+            verdict.className = 'verdict';
+            return;
+          }
+
+          // Use measured alpha when available, else compute from gradient maths.
+          let alpha = sample.alpha;
+          if (alpha === null) {
+            alpha = kind === 'linear'
+              ? Math.max(0, 1 - sample.relX)
+              : Math.max(0, 1 - (Math.hypot(sample.relX - 0.5, sample.relY - 0.5) / 0.5));
+          }
+
+          alphaCell.textContent = alpha.toFixed(2);
+          if (kind === 'linear') {
+            posCell.textContent = Math.round(sample.relX * 100) + '%';
+          } else {
+            const dist = Math.hypot(sample.relX - 0.5, sample.relY - 0.5) / 0.5;
+            posCell.textContent = Math.round(Math.min(1, dist) * 100) + '%';
+          }
+
+          const clickable = alpha > threshold;
+          verdict.textContent = clickable
+            ? '● Opaque — this pixel CATCHES clicks'
+            : '○ Transparent — clicks fall THROUGH here';
+          verdict.className = 'verdict ' + (clickable ? 'opaque' : 'transparent');
+        }
+
+        img.parentElement.addEventListener('pointermove', onMove);
+        img.parentElement.addEventListener('pointerleave', () => {
+          alphaCell.textContent = '–';
+          posCell.textContent = '–';
+          verdict.textContent = 'Move your cursor over the gradient…';
+          verdict.className = 'verdict';
+        });
+
+        // Hover highlight + custom events from the library.
+        img.addEventListener('alpha-mask-over', () => img.classList.add('opaque-hover'));
+        img.addEventListener('alpha-mask-out', () => img.classList.remove('opaque-hover'));
+
+        // Click landing on the opaque gradient.
+        img.addEventListener('click', () => {
+          log(`✔ ${kind}: click caught by the OPAQUE gradient`, 'success');
+          img.animate(
+            [{ transform: 'scale(1)' }, { transform: 'scale(0.97)' }, { transform: 'scale(1)' }],
+            { duration: 180 }
+          );
+        });
+      }
+
+      // Click that fell through to the button behind the gradient.
+      document.querySelectorAll('.catch-layer').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          log(`↳ ${btn.dataset.name}: click fell THROUGH the transparent gradient to the button behind`, 'warning');
+          btn.animate(
+            [{ background: 'rgba(40,167,69,0.25)' }, { background: 'transparent' }],
+            { duration: 350 }
+          );
+        });
+      });
+
+      // ----- Controls -----
+      function setupControls() {
+        const slider = document.getElementById('threshold-slider');
+        const valueLabel = document.getElementById('threshold-value');
+
+        slider.addEventListener('input', (e) => {
+          threshold = parseFloat(e.target.value);
+          valueLabel.textContent = threshold.toFixed(2);
+          document.getElementById('thr-linear').textContent = threshold.toFixed(2);
+          document.getElementById('thr-radial').textContent = threshold.toFixed(2);
+          if (manager) AlphaMaskEvents.setThreshold(threshold);
+          updateOverlays();
+          log(`Threshold set to ${threshold.toFixed(2)}`, 'info');
+        });
+
+        document.getElementById('overlay-toggle').addEventListener('change', (e) => {
+          setOverlayVisible(e.target.checked);
+        });
+
+        document.getElementById('log-toggle').addEventListener('change', (e) => {
+          debugEnabled = e.target.checked;
+        });
+
+        window.addEventListener('resize', updateOverlays);
+      }
+
+      // ----- Init -----
+      function initializeDemo() {
+        if (typeof AlphaMaskEvents === 'undefined') return;
+        manager = AlphaMaskEvents.init({ threshold, log: false });
+        log('Alpha Mask Events initialized', 'success');
+
+        setupControls();
+        wireReadout('img-linear', 'linear');
+        wireReadout('img-radial', 'radial');
+
+        // Build sampler canvases once images are decoded, then draw overlays.
+        ['img-linear', 'img-radial'].forEach((id) => {
+          const img = document.getElementById(id);
+          const ready = () => { alphaAt(img, -1, -1); updateOverlays(); };
+          if (img.complete && img.naturalWidth) ready();
+          else img.addEventListener('load', ready);
+        });
+
+        setOverlayVisible(true);
+        updateOverlays();
+      }
+
+      document.addEventListener('alphaMaskEventsLoaded', (event) => {
+        document.getElementById('library-source').textContent =
+          event.detail.source === 'local' ? 'local build' : 'CDN';
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', initializeDemo);
+        } else {
+          initializeDemo();
+        }
+      });
+
+      document.addEventListener('alphaMaskEventsLoadError', () => {
+        document.getElementById('library-source').textContent = 'load failed';
+        log('Failed to load the Alpha Mask Events library', 'error');
+      });
+    </script>
+  </body>
+</html>

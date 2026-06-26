@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">
+  <!--
+    Radial gradient: fully opaque pink in the centre, fading to fully
+    transparent at the edges. Raising the threshold shrinks the clickable
+    region toward the solid centre; lowering it grows the clickable circle
+    outward.
+  -->
+  <defs>
+    <radialGradient id="fade" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#e83e8c" stop-opacity="1" />
+      <stop offset="1" stop-color="#e83e8c" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="300" height="300" fill="url(#fade)" />
+</svg>
